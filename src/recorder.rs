@@ -78,12 +78,10 @@ impl RecorderState {
                                 };
                             }
                         }
-                        RecordingStatus::Scheduled => {
-                            if rec.stop <= now {
-                                rec.status = RecordingStatus::Failed {
-                                    error: "Missed (app was not running)".to_string(),
-                                };
-                            }
+                        RecordingStatus::Scheduled if rec.stop <= now => {
+                            rec.status = RecordingStatus::Failed {
+                                error: "Missed (app was not running)".to_string(),
+                            };
                         }
                         _ => {}
                     }

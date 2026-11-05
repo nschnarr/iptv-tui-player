@@ -462,7 +462,7 @@ impl App {
 
         let rss_before = Self::get_rss_mb();
         let old_playlist_refs = std::sync::Arc::strong_count(&self.playlist);
-        let old_epg_refs = self.epg.as_ref().map(|e| std::sync::Arc::strong_count(e)).unwrap_or(0);
+        let old_epg_refs = self.epg.as_ref().map(std::sync::Arc::strong_count).unwrap_or(0);
         self.log.info("refresh-mem", format!(
             "STEP 0 (before): RSS={:.0}MB | old playlist refs={} ({} ch) | old EPG refs={}",
             rss_before, old_playlist_refs, old_count, old_epg_refs
@@ -503,7 +503,7 @@ impl App {
                 "STEP 3 (epg search rebuild): RSS={:.0}MB (delta={:+.0}) | new playlist refs={} | EPG refs={}",
                 rss_after_epg_rebuild, rss_after_epg_rebuild - rss_before,
                 std::sync::Arc::strong_count(&new_arc),
-                self.epg.as_ref().map(|e| std::sync::Arc::strong_count(e)).unwrap_or(0)
+                self.epg.as_ref().map(std::sync::Arc::strong_count).unwrap_or(0)
             ));
         }
 

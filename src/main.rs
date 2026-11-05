@@ -56,7 +56,7 @@ fn get_rss_mb() -> f64 {
 fn log_memory_diagnostics(app: &App) {
     let rss = get_rss_mb();
     let playlist_refs = Arc::strong_count(&app.playlist);
-    let epg_refs = app.epg.as_ref().map(|e| Arc::strong_count(e)).unwrap_or(0);
+    let epg_refs = app.epg.as_ref().map(Arc::strong_count).unwrap_or(0);
     let playlist_channels = app.playlist.channels.len();
     let epg_programmes = app.epg.as_ref().map(|e| e.programme_count()).unwrap_or(0);
 
@@ -538,14 +538,14 @@ fn run_event_loop(
     let memory_log_interval = Duration::from_secs(300); // every 5 minutes
 
     // Log initial memory state
-    log_memory_diagnostics(&app);
+    log_memory_diagnostics(app);
 
     loop {
         app.poll_search_results();
 
         // Periodic memory diagnostics
         if last_memory_log.elapsed() >= memory_log_interval {
-            log_memory_diagnostics(&app);
+            log_memory_diagnostics(app);
             last_memory_log = Instant::now();
         }
 
@@ -556,14 +556,14 @@ fn run_event_loop(
                     new_playlist.channels.len(),
                     if fresh_epg.is_some() { "yes" } else { "no" }
                 ));
-                log_memory_diagnostics(&app);
+                log_memory_diagnostics(app);
                 app.log.info("refresh-mem", "--- BEGIN refresh_playlist ---");
                 app.refresh_playlist(new_playlist);
                 app.log.info("refresh-mem", "--- END refresh_playlist ---");
-                log_memory_diagnostics(&app);
+                log_memory_diagnostics(app);
                 if let Some(new_epg) = fresh_epg {
                     let rss_pre_epg = get_rss_mb();
-                    let old_epg_refs = app.epg.as_ref().map(|e| Arc::strong_count(e)).unwrap_or(0);
+                    let old_epg_refs = app.epg.as_ref().map(Arc::strong_count).unwrap_or(0);
                     let old_epg_progs = app.epg.as_ref().map(|e| e.programme_count()).unwrap_or(0);
                     let new_epg_progs = new_epg.programme_count();
                     app.log.info("refresh-mem", format!(
@@ -584,7 +584,7 @@ fn run_event_loop(
                     app.log.info("refresh-mem", format!(
                         "EPG STEP 1 (drop old epg_search): RSS={:.0}MB (delta={:+.0}) | old EPG refs={}",
                         rss_after_old_drop, rss_after_old_drop - rss_pre_epg,
-                        app.epg.as_ref().map(|e| Arc::strong_count(e)).unwrap_or(0)
+                        app.epg.as_ref().map(Arc::strong_count).unwrap_or(0)
                     ));
 
                     app.epg_search_engine = Some(epg_search::EpgSearchEngine::new(
@@ -596,14 +596,14 @@ fn run_event_loop(
                     let ch_count = epg_arc.channel_count();
 
                     // Swap EPG — old Arc dropped
-                    let old_epg_strong = app.epg.as_ref().map(|e| Arc::strong_count(e)).unwrap_or(0);
+                    let old_epg_strong = app.epg.as_ref().map(Arc::strong_count).unwrap_or(0);
                     app.epg = Some(epg_arc);
                     let rss_after_epg_swap = get_rss_mb();
                     app.log.info("refresh-mem", format!(
                         "EPG STEP 2 (swap epg): RSS={:.0}MB (delta={:+.0}) | old EPG had {} refs | new EPG refs={}",
                         rss_after_epg_swap, rss_after_epg_swap - rss_pre_epg,
                         old_epg_strong,
-                        app.epg.as_ref().map(|e| Arc::strong_count(e)).unwrap_or(0)
+                        app.epg.as_ref().map(Arc::strong_count).unwrap_or(0)
                     ));
 
                     app.guide_state.channels_dirty = true;
@@ -615,7 +615,7 @@ fn run_event_loop(
                     app.status_message = Some(msg);
                 }
                 app.log.info("refresh-mem", "--- FINAL STATE ---");
-                log_memory_diagnostics(&app);
+                log_memory_diagnostics(app);
             }
         }
 
