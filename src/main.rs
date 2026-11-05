@@ -80,6 +80,7 @@ struct CliArgs {
     buffer_mode: hdhr::BufferMode,
     buffer_secs: f64,
     refresh_hours: f64,
+    player: player::Player,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -159,7 +160,7 @@ fn main() -> anyhow::Result<()> {
         None
     };
 
-    run_tui(playlist, epg, cli.hdhr_port, cli.hdhr_bind, cli.buffer_mode, cli.buffer_secs, cli.refresh_hours, cli.provider, cli.epg_source, used_cache)?;
+    run_tui(playlist, epg, cli.hdhr_port, cli.hdhr_bind, cli.buffer_mode, cli.buffer_secs, cli.refresh_hours, cli.player, cli.provider, cli.epg_source, used_cache)?;
     Ok(())
 }
 
@@ -175,6 +176,7 @@ fn parse_args(args: &[String]) -> anyhow::Result<CliArgs> {
     let mut buffer_mode = hdhr::BufferMode::None;
     let mut buffer_secs: f64 = 0.0;
     let mut refresh_hours: f64 = 0.0;
+    let mut player = player::Player::Vlc;
 
     let mut i = 1;
     while i < args.len() {
@@ -273,6 +275,14 @@ fn parse_args(args: &[String]) -> anyhow::Result<CliArgs> {
                     anyhow::bail!("--refresh-hours requires a number (e.g. 24)");
                 }
             }
+            "--player" => {
+                i += 1;
+                if i < args.len() {
+                    player = player::Player::from_str(&args[i])?;
+                } else {
+                    anyhow::bail!("--player requires a player: vlc or mpv");
+                }
+            }
             "--help" | "-h" => {
                 print_help();
                 std::process::exit(0);
@@ -293,7 +303,7 @@ fn parse_args(args: &[String]) -> anyhow::Result<CliArgs> {
             xtream_user.ok_or_else(|| anyhow::anyhow!("--xtream-user is required"))?;
         let password =
             xtream_pass.ok_or_else(|| anyhow::anyhow!("--xtream-pass is required"))?;
-        return Ok(CliArgs { epg_source, hdhr_port, hdhr_bind, buffer_mode, buffer_secs, refresh_hours, provider: Provider::Xtream(XtreamProvider {
+        return Ok(CliArgs { epg_source, hdhr_port, hdhr_bind, buffer_mode, buffer_secs, refresh_hours, player, provider: Provider::Xtream(XtreamProvider {
             server,
             username,
             password,
@@ -309,6 +319,7 @@ fn parse_args(args: &[String]) -> anyhow::Result<CliArgs> {
             buffer_mode,
             buffer_secs,
             refresh_hours,
+            player,
             provider: Provider::M3u {
                 path: playlist_path,
                 url: playlist_url,
@@ -351,12 +362,16 @@ fn print_help() {
     println!("  --refresh-hours <hours>      Re-fetch playlist every N hours (default: 0 = off)");
     println!("                               Keeps stream URLs fresh without restarting");
     println!();
+    println!("Playback:");
+    println!("  --player <vlc|mpv>           Default media player (default: vlc)");
+    println!("                               Can still be switched at runtime with P");
+    println!();
     println!("Other:");
     println!("  -h, --help                   Show this help");
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, hdhr_bind: String, buffer_mode: hdhr::BufferMode, buffer_secs: f64, refresh_hours: f64, provider: Provider, epg_source: Option<String>, used_cache: bool) -> anyhow::Result<()> {
+fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, hdhr_bind: String, buffer_mode: hdhr::BufferMode, buffer_secs: f64, refresh_hours: f64, player: player::Player, provider: Provider, epg_source: Option<String>, used_cache: bool) -> anyhow::Result<()> {
     // Start HDHR server before entering raw mode so we can print the port
     let hdhr_state = if let Some(port) = hdhr_port {
         let server = hdhr::HdhrServer::new(port, hdhr_bind.clone(), Arc::new(playlist.clone()), crate::favorites::load_favorites(), epg.as_ref().map(|e| Arc::new(e.clone())), buffer_mode.clone(), buffer_secs);
@@ -392,6 +407,7 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
         app.epg_last_refresh = Some(chrono::Utc::now());
     }
     app.epg_source = epg_source;
+    app.selected_player = player;
 
     // Log startup info
     app.log.info("startup", format!("Loaded {} channels across {} groups", app.playlist.channels.len(), app.playlist.groups.len()));

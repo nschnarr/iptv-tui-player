@@ -261,6 +261,12 @@ Usage: iptv [OPTIONS]
 |------|-------------|
 | `--refresh-hours <hours>` | Re-fetch playlist + EPG every N hours (default: `0` = off) |
 
+### Playback
+
+| Flag | Description |
+|------|-------------|
+| `--player <vlc\|mpv>` | Default media player (default: `vlc`). Can still be switched at runtime with `P` |
+
 ### Other
 
 | Flag | Description |

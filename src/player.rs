@@ -11,6 +11,14 @@ pub enum Player {
 }
 
 impl Player {
+    pub fn from_str(s: &str) -> anyhow::Result<Self> {
+        match s.to_lowercase().as_str() {
+            "vlc" => Ok(Self::Vlc),
+            "mpv" => Ok(Self::Mpv),
+            _ => anyhow::bail!("Unknown player: {}. Use 'vlc' or 'mpv'", s),
+        }
+    }
+
     pub fn next(self) -> Self {
         match self {
             Player::Vlc => Player::Mpv,
