@@ -158,7 +158,8 @@ impl Epg {
             .build()
             .get(url)
             .call()
-            .with_context(|| format!("Failed to fetch EPG from {url}"))?;
+            .map_err(crate::redact::http_error)
+            .context("Failed to fetch EPG")?;
 
         // Read into memory to both cache and parse
         let mut data = Vec::new();

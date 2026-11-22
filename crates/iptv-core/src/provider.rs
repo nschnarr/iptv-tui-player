@@ -24,7 +24,10 @@ impl Provider {
                 if let Some(p) = path {
                     parser::parse_m3u_file(p)
                 } else if let Some(u) = url {
-                    eprintln!("Fetching M3U playlist from {u}");
+                    eprintln!(
+                        "Fetching M3U playlist from {}",
+                        crate::redact::redact_url(u)
+                    );
                     let start = std::time::Instant::now();
                     let response = ureq::AgentBuilder::new()
                         .timeout_connect(std::time::Duration::from_secs(30))
@@ -32,7 +35,8 @@ impl Provider {
                         .build()
                         .get(u)
                         .call()
-                        .with_context(|| format!("Failed to fetch M3U from {u}"))?;
+                        .map_err(crate::redact::http_error)
+                        .context("Failed to fetch M3U playlist")?;
                     let content_length: Option<u64> = response
                         .header("Content-Length")
                         .and_then(|s| s.parse().ok());

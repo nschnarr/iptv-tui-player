@@ -13,5 +13,6 @@ pub mod model;
 pub mod parser;
 pub mod paths;
 pub mod provider;
+pub mod redact;
 pub mod search;
 pub mod xtream;

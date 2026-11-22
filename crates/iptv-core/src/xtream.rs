@@ -248,6 +248,7 @@ impl XtreamProvider {
             .get(&url)
             .timeout(std::time::Duration::from_secs(30))
             .call()
+            .map_err(crate::redact::http_error)
             .with_context(|| format!("Failed to fetch {action}"))?
             .into_string()
             .with_context(|| format!("Failed to read response for {action}"))?;
