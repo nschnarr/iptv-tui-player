@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IPTV Server</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5f6b7a;
+    --border: #dde1e6; --accent: #2f6fde; --accent-text: #fff;
+    --star: #e0a100; --ok: #1a7f37; --warn: #b35900; --err: #c62828;
+    --hover: #eef2f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #1a1e24; --text: #e6e9ed; --muted: #9aa5b1;
+      --border: #2c323a; --accent: #5b93f5; --accent-text: #0b0d10;
+      --star: #f2c94c; --ok: #4ac26b; --warn: #f0a050; --err: #ff6b6b;
+      --hover: #232933;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px;
+           background: var(--panel); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+          color: var(--muted); white-space: nowrap; }
+  .pill.ok { color: var(--ok); border-color: currentColor; }
+  .pill.warn { color: var(--warn); border-color: currentColor; }
+  .pill.err { color: var(--err); border-color: currentColor; }
+  .spacer { flex: 1; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; padding: 6px 12px;
+           border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+  button:hover { background: var(--hover); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=search] { font: inherit; width: 100%; padding: 7px 10px; border-radius: 6px;
+           border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+  main { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 57px); }
+  aside { border-right: 1px solid var(--border); background: var(--panel); display: flex;
+          flex-direction: column; min-height: 0; }
+  aside .search { padding: 10px; border-bottom: 1px solid var(--border); }
+  #groups { overflow-y: auto; flex: 1; }
+  .group { display: flex; justify-content: space-between; gap: 8px; padding: 7px 12px;
+           cursor: pointer; border-left: 3px solid transparent; }
+  .group:hover { background: var(--hover); }
+  .group.active { border-left-color: var(--accent); background: var(--hover); font-weight: 600; }
+  .group .count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .group .count b { color: var(--star); font-weight: 600; }
+  section { display: flex; flex-direction: column; min-height: 0; }
+  .toolbar { display: flex; gap: 8px; align-items: center; padding: 10px 16px;
+             border-bottom: 1px solid var(--border); }
+  .toolbar label { white-space: nowrap; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  #list { overflow-y: auto; flex: 1; padding: 0 16px 16px; }
+  .meta { color: var(--muted); padding: 10px 0; font-size: 13px; }
+  .row { display: grid; grid-template-columns: 36px 40px 1fr auto; align-items: center; gap: 10px;
+         padding: 6px 4px; border-bottom: 1px solid var(--border); }
+  .row:hover { background: var(--hover); }
+  .star { border: none; background: none; font-size: 20px; padding: 0 4px; color: var(--muted); }
+  .star.on { color: var(--star); }
+  .logo { width: 36px; height: 24px; object-fit: contain; }
+  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name small { color: var(--muted); margin-left: 6px; }
+  .num { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--accent);
+         border: 1px solid currentColor; border-radius: 4px; padding: 0 6px; }
+  #plex { margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px;
+          background: var(--panel); display: none; }
+  #plex h2 { font-size: 14px; margin: 0 0 6px; }
+  #plex ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+  .empty { padding: 40px 0; text-align: center; color: var(--muted); }
+  @media (max-width: 720px) {
+    main { grid-template-columns: 1fr; height: auto; }
+    aside { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
+    #list { overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>📺 IPTV Server</h1>
+  <span id="load" class="pill">Loading…</span>
+  <span id="lineupPill" class="pill"></span>
+  <span id="plexPill" class="pill" style="display:none"></span>
+  <span class="spacer"></span>
+  <button id="plexDetails" style="display:none">Plex status</button>
+  <button id="refresh" title="Re-fetch the playlist and guide from the provider">Reload playlist</button>
+  <button id="sync" class="primary" style="display:none" title="Push the current lineup to Plex now">Sync to Plex</button>
+</header>
+<main>
+  <aside>
+    <div class="search"><input id="groupFilter" type="search" placeholder="Filter groups…"></div>
+    <div id="groups"></div>
+  </aside>
+  <section>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Search channels…" autocomplete="off">
+      <label><input id="favOnly" type="checkbox"> Favourites only</label>
+    </div>
+    <div id="list">
+      <div id="plex"></div>
+      <div id="meta" class="meta"></div>
+      <div id="rows"></div>
+      <div style="text-align:center;padding:12px"><button id="more" style="display:none">Load more</button></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { group: '', q: '', favOnly: false, offset: 0, groups: [], total: 0 };
+const PAGE = 100;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...opts });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error((data && data.error) || res.statusText);
+  return data;
+}
+
+function ago(secs) {
+  if (!secs) return 'never';
+  const d = Math.max(0, Date.now() / 1000 - secs);
+  if (d < 60) return 'just now';
+  if (d < 3600) return Math.round(d / 60) + 'm ago';
+  if (d < 86400) return Math.round(d / 3600) + 'h ago';
+  return Math.round(d / 86400) + 'd ago';
+}
+
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null) e.setAttribute(k, v);
+  }
+  for (const c of children) if (c !== null && c !== undefined) e.append(c);
+  return e;
+}
+
+let lastLoadedAt = null;
+async function refreshStatus() {
+  let s;
+  try { s = await api('/api/status'); } catch { return; }
+  const l = s.load;
+  const load = $('load');
+  if (l.loading && !l.loaded_at) { load.textContent = 'Fetching playlist…'; load.className = 'pill warn'; }
+  else if (l.loading) { load.textContent = `${s.channels.toLocaleString()} channels · refreshing…`; load.className = 'pill warn'; }
+  else if (l.last_error) { load.textContent = `${s.channels.toLocaleString()} channels · error`; load.className = 'pill err'; load.title = l.last_error; }
+  else { load.textContent = `${s.channels.toLocaleString()} channels · ${ago(l.loaded_at)}`; load.className = 'pill ok'; load.title = `Source: ${l.source}; EPG programmes: ${l.epg_programmes}`; }
+  $('lineupPill').textContent = `${s.lineup} in tuner lineup`;
+  $('lineupPill').title = `Tuner "${s.tuner.name}" (ID ${s.tuner.device_id}) on port ${s.tuner.port}`;
+
+  const p = s.plex;
+  if (p.configured) {
+    $('sync').style.display = $('plexDetails').style.display = $('plexPill').style.display = '';
+    const pill = $('plexPill');
+    if (p.running) { pill.textContent = 'Plex: syncing…'; pill.className = 'pill warn'; }
+    else if (p.pending) { pill.textContent = 'Plex: sync queued'; pill.className = 'pill warn'; }
+    else if (p.last_error) { pill.textContent = 'Plex: sync failed'; pill.className = 'pill err'; }
+    else if (p.last_sync_at) { pill.textContent = `Plex: synced ${ago(p.last_sync_at)}`; pill.className = 'pill ok'; }
+    else { pill.textContent = p.auto_sync ? 'Plex: auto-sync on' : 'Plex: manual sync'; pill.className = 'pill'; }
+    $('sync').disabled = p.running;
+    renderPlex(p);
+  }
+  // Playlist (re)loaded: refresh the lists.
+  if (l.loaded_at && l.loaded_at !== lastLoadedAt) {
+    lastLoadedAt = l.loaded_at;
+    loadGroups(); loadChannels(true);
+  }
+}
+
+function renderPlex(p) {
+  const box = $('plex');
+  box.replaceChildren(
+    el('h2', {}, 'Plex sync'),
+    el('div', {}, p.last_error ? `Last error: ${p.last_error}` :
+                   p.last_report ? `DVR ${p.last_report.dvr_id}: ${p.last_report.channels_enabled} channel(s) enabled, ${ago(p.last_sync_at)}` :
+                   'No sync has run yet.'),
+    p.last_report ? el('ul', {}, ...p.last_report.steps.map((t) => el('li', {}, t))) : null,
+  );
+}
+
+async function loadGroups() {
+  try { state.groups = await api('/api/groups'); } catch (e) { state.groups = []; }
+  renderGroups();
+}
+
+function renderGroups() {
+  const f = $('groupFilter').value.toLowerCase();
+  const total = state.groups.reduce((a, g) => a + g.channels, 0);
+  const favs = state.groups.reduce((a, g) => a + g.favorites, 0);
+  const item = (name, label, channels, favorites) => el('div', {
+      class: 'group' + (state.group === name ? ' active' : ''),
+      onclick: () => { state.group = name; renderGroups(); loadChannels(true); },
+    }, el('span', { class: 'name' }, label),
+       el('span', { class: 'count' }, favorites ? el('b', {}, `★${favorites} `) : null, channels.toLocaleString()));
+  const rows = [item('', 'All live channels', total, favs)];
+  for (const g of state.groups) {
+    if (f && !g.name.toLowerCase().includes(f)) continue;
+    rows.push(item(g.name, g.name, g.channels, g.favorites));
+  }
+  $('groups').replaceChildren(...rows);
+}
+
+let reqId = 0;
+async function loadChannels(reset) {
+  if (reset) state.offset = 0;
+  const my = ++reqId;
+  const params = new URLSearchParams({ offset: state.offset, limit: PAGE });
+  if (state.group) params.set('group', state.group);
+  if (state.q) params.set('q', state.q);
+  if (state.favOnly) params.set('favorites', 'true');
+  let data;
+  try { data = await api('/api/channels?' + params); } catch (e) { $('meta').textContent = e.message; return; }
+  if (my !== reqId) return; // a newer search superseded this one
+  state.total = data.total;
+  const rows = data.items.map(renderRow);
+  if (reset) $('rows').replaceChildren(...rows); else $('rows').append(...rows);
+  state.offset += data.items.length;
+  $('meta').textContent = data.total ? `${data.total.toLocaleString()} channel(s)` : '';
+  if (!data.total && reset) $('rows').replaceChildren(el('div', { class: 'empty' },
+      lastLoadedAt ? 'No channels match.' : 'Waiting for the playlist to load…'));
+  $('more').style.display = state.offset < data.total ? '' : 'none';
+}
+
+function renderRow(ch) {
+  const star = el('button', { class: 'star' + (ch.favorite ? ' on' : ''), title: ch.favorite ? 'Remove from lineup' : 'Add to lineup' }, ch.favorite ? '★' : '☆');
+  const num = el('span', { class: 'num', style: ch.number ? '' : 'visibility:hidden' }, ch.number ? `ch ${ch.number}` : '');
+  star.addEventListener('click', async () => {
+    star.disabled = true;
+    try {
+      const r = await api('/api/favorites', { method: 'POST', body: JSON.stringify({ name: ch.name, group: ch.group, favorite: !ch.favorite }) });
+      ch.favorite = r.favorite; ch.number = r.number;
+      star.className = 'star' + (ch.favorite ? ' on' : ''); star.textContent = ch.favorite ? '★' : '☆';
+      num.textContent = ch.number ? `ch ${ch.number}` : ''; num.style.visibility = ch.number ? '' : 'hidden';
+      const g = state.groups.find((g) => g.name === ch.group);
+      if (g) { g.favorites += ch.favorite ? 1 : -1; renderGroups(); }
+      refreshStatus();
+    } catch (e) { alert('Could not update favourite: ' + e.message); }
+    star.disabled = false;
+  });
+  const logo = ch.logo ? el('img', { class: 'logo', src: ch.logo, loading: 'lazy', alt: '', onerror: (e) => e.target.style.visibility = 'hidden' }) : el('span');
+  return el('div', { class: 'row' }, star, logo,
+    el('div', { class: 'name', title: ch.name }, ch.name, state.group ? null : el('small', {}, ch.group)), num);
+}
+
+let searchTimer;
+$('q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = $('q').value.trim(); loadChannels(true); }, 250); });
+$('favOnly').addEventListener('change', () => { state.favOnly = $('favOnly').checked; loadChannels(true); });
+$('groupFilter').addEventListener('input', renderGroups);
+$('more').addEventListener('click', () => loadChannels(false));
+$('refresh').addEventListener('click', async () => { try { await api('/api/refresh', { method: 'POST' }); refreshStatus(); } catch (e) { alert(e.message); } });
+$('sync').addEventListener('click', async () => { try { await api('/api/plex/sync', { method: 'POST' }); refreshStatus(); } catch (e) { alert(e.message); } });
+$('plexDetails').addEventListener('click', () => { const b = $('plex'); b.style.display = b.style.display === 'block' ? 'none' : 'block'; });
+
+refreshStatus();
+loadChannels(true);
+setInterval(refreshStatus, 3000);
+</script>
+</body>
+</html>

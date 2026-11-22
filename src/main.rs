@@ -2,25 +2,20 @@
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod app;
-mod cache;
+// Core modules live in the iptv-core crate; re-import them at the crate root
+// so existing `crate::model::...` paths keep working.
+#[allow(unused_imports)]
+use iptv_core::{
+    cache, epg, epg_search, error, favorites, hdhr, model, parser, provider, search, xtream,
+};
 mod downloader;
-mod epg;
-mod epg_search;
-mod error;
-mod favorites;
-mod hdhr;
 mod log;
-mod model;
-mod parser;
 mod player;
-mod provider;
 mod recorder;
-mod search;
 mod series;
 mod theme;
 mod timezone;
 mod ui;
-mod xtream;
 
 use app::{App, AppMode, GuideViewMode, SeriesRow};
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};

@@ -66,14 +66,7 @@ pub struct AppLog {
 }
 
 fn log_dir() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home)
-            .join(".config")
-            .join("iptv")
-            .join("logs")
-    } else {
-        PathBuf::from(".config").join("iptv").join("logs")
-    }
+    iptv_core::paths::data_dir().join("logs")
 }
 
 impl AppLog {
@@ -170,6 +163,7 @@ mod tests {
 
     #[test]
     fn test_new_log_empty() {
+        let _guard = iptv_core::paths::test_data_dir();
         let log = AppLog::new();
         assert_eq!(log.entry_count(), 0);
         assert!(log.entries().is_empty());
@@ -177,6 +171,7 @@ mod tests {
 
     #[test]
     fn test_log_info() {
+        let _guard = iptv_core::paths::test_data_dir();
         let log = AppLog::new();
         log.info("test", "hello world");
         assert_eq!(log.entry_count(), 1);
@@ -187,6 +182,7 @@ mod tests {
 
     #[test]
     fn test_log_multiple_levels() {
+        let _guard = iptv_core::paths::test_data_dir();
         let log = AppLog::new();
         log.info("src", "info msg");
         log.warn("src", "warn msg");
@@ -197,6 +193,7 @@ mod tests {
 
     #[test]
     fn test_log_level_display() {
+        let _guard = iptv_core::paths::test_data_dir();
         assert_eq!(format!("{}", LogLevel::Info), "INFO");
         assert_eq!(format!("{}", LogLevel::Warn), "WARN");
         assert_eq!(format!("{}", LogLevel::Error), "ERR ");
@@ -205,6 +202,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_format() {
+        let _guard = iptv_core::paths::test_data_dir();
         let entry = LogEntry {
             timestamp: chrono::DateTime::parse_from_rfc3339("2026-01-15T10:30:00Z")
                 .unwrap()
@@ -222,6 +220,7 @@ mod tests {
 
     #[test]
     fn test_log_entry_size_bytes() {
+        let _guard = iptv_core::paths::test_data_dir();
         let entry = LogEntry {
             timestamp: Utc::now(),
             level: LogLevel::Info,
@@ -234,6 +233,7 @@ mod tests {
 
     #[test]
     fn test_log_clone_is_independent() {
+        let _guard = iptv_core::paths::test_data_dir();
         let log = AppLog::new();
         let log2 = log.clone();
         log.info("src", "from original");
@@ -243,6 +243,7 @@ mod tests {
 
     #[test]
     fn test_log_entries_returns_cloned_vec() {
+        let _guard = iptv_core::paths::test_data_dir();
         let log = AppLog::new();
         log.info("src", "msg1");
         let entries = log.entries();

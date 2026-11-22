@@ -300,40 +300,108 @@ Usage: iptv [OPTIONS]
 | `?` | Help |
 | `q` | Quit |
 
+## Server Mode (Docker / Kubernetes)
+
+`iptv-server` is a headless build of the same core for running in a container. It provides:
+
+- **HDHomeRun tuner** (port 5004) exposing your favourite channels to Plex/Jellyfin
+- **Web UI** (port 8080) to browse groups, search channels and star favourites
+- **Plex sync**: when favourites change, it updates the Plex DVR's channel map and reloads the guide, so new channels show up without clicking through Plex's setup again
+
+Guide numbers are stored per channel, so adding or removing a favourite never renumbers the others (Plex's channel map depends on them).
+
+```bash
+docker build -t iptv-server .
+docker run -p 8080:8080 -p 5004:5004 -v iptv-data:/data \
+  -e IPTV_M3U_URL='http://provider/get.php?...' \
+  -e IPTV_EPG='http://provider/xmltv.php?...' \
+  -e PLEX_URL='http://plex:32400' -e PLEX_TOKEN='...' \
+  iptv-server
+```
+
+Configuration is by environment variable; run `iptv-server --help` for the full list. The main ones:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `IPTV_M3U_URL` / `IPTV_M3U_PATH` | — | Playlist source (or `IPTV_XTREAM_SERVER` / `_USERNAME` / `_PASSWORD`) |
+| `IPTV_EPG` | — | XMLTV URL or path |
+| `IPTV_DATA_DIR` | `/data` in the image | Favourites, channel numbers, cache (mount a volume) |
+| `IPTV_TUNER_COUNT` | `2` | Concurrent streams; match your provider's connection limit |
+| `IPTV_BUFFER` | `none` | `ffmpeg` to remux via FFmpeg (included in the image) |
+| `IPTV_REFRESH_HOURS` | `12` | Re-fetch playlist + EPG interval |
+| `PLEX_URL` / `PLEX_TOKEN` | — | Enables Plex sync |
+| `PLEX_AUTO_SYNC` | `true` | Sync automatically after favourite changes (10s debounce) |
+| `PLEX_DVR_ID` | auto | DVR to manage; auto-detected by tuner device ID |
+
+**Auto-discovery (optional):** Plex finds HDHomeRun tuners by UDP broadcast on port 65001, which doesn't reach a pod network. Run a second, tiny pod from the same image with `hostNetwork: true` and args `["discovery"]`. It answers the broadcast and points Plex at the tuner's LAN address. It needs no volume or credentials:
+
+```yaml
+spec:
+  hostNetwork: true
+  containers:
+    - name: discovery
+      image: iptv-server
+      args: ["discovery"]
+      env:
+        - { name: IPTV_TUNER_URL, value: "http://192.168.1.50:5004" }  # tuner's LAN address
+        - { name: IPTV_DEVICE_ID, value: "1F7E5E07" }                  # same as the main server
+        - { name: IPTV_TUNER_COUNT, value: "2" }                       # same as the main server
+```
+
+**One-time Plex setup:** In Plex → Settings → Live TV & DVR, add the tuner. With the discovery pod running it should be listed; otherwise enter its address manually (`<lan-ip>:5004`). When asked for a guide, choose *XMLTV* and enter `http://<service-ip>:5004/xmltv.xml`. After that, favouriting a channel in the web UI adds it to Plex automatically.
+
+Health check: `GET /healthz` on the UI port. The web UI has no authentication, so keep it on your private network or put it behind your ingress auth.
+
 ## Architecture
 
+A Cargo workspace: a shared core library with two front-ends.
+
 ```
-src/
-├── main.rs        # CLI parsing, startup, event loop
-├── app.rs         # Application state and logic
-├── ui.rs          # ratatui rendering
-├── theme.rs       # Color theme system (6 built-in themes)
-├── parser.rs      # M3U/M3U8 streaming parser
-├── model.rs       # Channel/playlist data model
-├── search.rs      # Nucleo fuzzy search integration
-├── epg.rs         # XMLTV parser and EPG data
-├── epg_search.rs  # Async EPG programme search
-├── series.rs      # Series tree builder
-├── favorites.rs   # Favorites persistence
-├── log.rs         # Application log buffer with disk flush
-├── downloader.rs  # Download queue and worker
-├── recorder.rs    # DVR recording scheduler
-├── hdhr.rs        # HDHomeRun tuner server + stream proxy
-├── xtream.rs      # Xtream Codes API client
-├── provider.rs    # Playlist source abstraction
-├── cache.rs       # Disk caching layer
-├── player.rs      # External player launcher
-├── timezone.rs    # Timezone selection and persistence
-└── error.rs       # Error types
+crates/iptv-core/src/     # Shared library (no UI)
+├── parser.rs             # M3U/M3U8 streaming parser
+├── model.rs              # Channel/playlist data model
+├── provider.rs           # Playlist source abstraction
+├── xtream.rs             # Xtream Codes API client
+├── epg.rs                # XMLTV parser and EPG data
+├── epg_search.rs         # Async EPG programme search
+├── search.rs             # Nucleo fuzzy search integration
+├── favorites.rs          # Favorites persistence
+├── channel_numbers.rs    # Stable HDHomeRun guide numbers
+├── hdhr.rs               # HDHomeRun tuner server + stream proxy
+├── cache.rs              # Disk caching layer
+├── paths.rs              # Data directory (IPTV_DATA_DIR)
+└── error.rs              # Error types
+
+src/                      # iptv — terminal UI
+├── main.rs               # CLI parsing, startup, event loop
+├── app.rs                # Application state and logic
+├── ui.rs                 # ratatui rendering
+├── theme.rs              # Color theme system (6 built-in themes)
+├── series.rs             # Series tree builder
+├── log.rs                # Application log buffer with disk flush
+├── downloader.rs         # Download queue and worker
+├── recorder.rs           # DVR recording scheduler
+├── player.rs             # External player launcher
+└── timezone.rs           # Timezone selection and persistence
+
+crates/iptv-server/       # iptv-server — headless tuner + web UI
+├── src/main.rs           # Startup and wiring
+├── src/config.rs         # Environment configuration
+├── src/loader.rs         # Background playlist/EPG refresh
+├── src/web.rs            # Web UI + JSON API (axum)
+├── src/plex.rs           # Plex DVR channel-map sync
+├── src/state.rs          # Shared state, debounced sync worker
+└── static/index.html     # Web UI (embedded in the binary)
 ```
 
 ## Configuration
 
-All config is stored in `~/.config/iptv/`:
+All config is stored in `~/.config/iptv/` (override with `IPTV_DATA_DIR`):
 
 | File | Purpose |
 |------|---------|
 | `favorites.json` | Starred channels |
+| `channel_numbers.json` | Stable HDHomeRun guide numbers for favourites |
 | `recordings.json` | DVR recording schedule and state |
 | `theme.json` | Selected color theme |
 | `timezone.json` | Timezone preference |

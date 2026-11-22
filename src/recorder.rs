@@ -8,11 +8,7 @@ use std::thread;
 use std::time::Duration;
 
 fn recordings_path() -> PathBuf {
-    let dir = if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config").join("iptv")
-    } else {
-        PathBuf::from(".config").join("iptv")
-    };
+    let dir = iptv_core::paths::data_dir();
     let _ = std::fs::create_dir_all(&dir);
     dir.join("recordings.json")
 }

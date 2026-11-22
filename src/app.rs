@@ -549,7 +549,7 @@ impl App {
         // Update HDHR state if active
         if let Some(ref hdhr_state) = self.hdhr_state {
             let mut state = hdhr_state.lock().unwrap();
-            state.playlist = Arc::clone(&new_arc);
+            state.set_playlist(Arc::clone(&new_arc));
         }
 
         // Swap — old Arc dropped (freed if no other refs)
@@ -854,7 +854,7 @@ impl App {
     pub fn sync_hdhr_favorites(&self) {
         if let Some(ref hdhr) = self.hdhr_state {
             if let Ok(mut state) = hdhr.lock() {
-                state.favorites = self.favorites.clone();
+                state.set_favorites(self.favorites.clone());
             }
         }
     }

@@ -174,11 +174,7 @@ pub fn solarized() -> Theme {
 // --- Persistence ---
 
 fn theme_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".config")
-        .join("iptv")
-        .join("theme.json")
+    iptv_core::paths::data_dir().join("theme.json")
 }
 
 #[derive(Serialize, Deserialize)]
@@ -223,6 +219,7 @@ mod tests {
 
     #[test]
     fn test_all_theme_names_resolve() {
+        let _guard = iptv_core::paths::test_data_dir();
         for name in THEME_NAMES {
             let theme = by_name(name);
             assert_eq!(theme.name, *name);
@@ -231,12 +228,14 @@ mod tests {
 
     #[test]
     fn test_unknown_theme_returns_default() {
+        let _guard = iptv_core::paths::test_data_dir();
         let theme = by_name("nonexistent");
         assert_eq!(theme.name, "default");
     }
 
     #[test]
     fn test_default_theme() {
+        let _guard = iptv_core::paths::test_data_dir();
         let theme = default();
         assert_eq!(theme.name, "default");
         assert_eq!(theme.accent, Color::Cyan);
@@ -246,6 +245,7 @@ mod tests {
 
     #[test]
     fn test_next_theme_cycles() {
+        let _guard = iptv_core::paths::test_data_dir();
         // Don't persist during tests — just test the logic
         let names = THEME_NAMES;
         for i in 0..names.len() {
@@ -257,6 +257,7 @@ mod tests {
 
     #[test]
     fn test_next_theme_wraps_around() {
+        let _guard = iptv_core::paths::test_data_dir();
         let last = THEME_NAMES[THEME_NAMES.len() - 1];
         let next = next_theme(last);
         assert_eq!(next.name, THEME_NAMES[0]);
@@ -264,6 +265,7 @@ mod tests {
 
     #[test]
     fn test_next_theme_unknown_starts_at_one() {
+        let _guard = iptv_core::paths::test_data_dir();
         let next = next_theme("garbage");
         // unknown maps to index 0 (default), so next is index 1
         assert_eq!(next.name, THEME_NAMES[1]);
@@ -271,11 +273,13 @@ mod tests {
 
     #[test]
     fn test_theme_names_count() {
+        let _guard = iptv_core::paths::test_data_dir();
         assert_eq!(THEME_NAMES.len(), 6);
     }
 
     #[test]
     fn test_catppuccin_uses_rgb() {
+        let _guard = iptv_core::paths::test_data_dir();
         let theme = catppuccin();
         // Catppuccin uses RGB, not named colors
         matches!(theme.accent, Color::Rgb(_, _, _));
@@ -284,6 +288,7 @@ mod tests {
 
     #[test]
     fn test_save_load_roundtrip() {
+        let _guard = iptv_core::paths::test_data_dir();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("theme.json");
         let config = serde_json::json!({"name": "dracula"});

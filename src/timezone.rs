@@ -2,13 +2,7 @@ use chrono_tz::Tz;
 use std::path::PathBuf;
 
 fn config_path() -> PathBuf {
-    // same dirs_fallback pattern as favorites.rs
-    let config_dir = if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config").join("iptv")
-    } else {
-        PathBuf::from(".config").join("iptv")
-    };
-    config_dir.join("timezone.json")
+    iptv_core::paths::data_dir().join("timezone.json")
 }
 
 pub fn load_timezone() -> Tz {

@@ -1,0 +1,19 @@
+[package]
+name = "iptv-core"
+version = "0.1.0"
+edition = "2021"
+description = "Playlist, EPG, favourites and HDHomeRun tuner logic shared by the iptv TUI and server"
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+nucleo = "0.5"
+quick-xml = "0.37"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+ureq = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

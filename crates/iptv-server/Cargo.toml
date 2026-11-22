@@ -1,0 +1,18 @@
+[package]
+name = "iptv-server"
+version = "0.1.0"
+edition = "2021"
+description = "Headless IPTV server: HDHomeRun tuner, web UI for favourites, and Plex DVR sync"
+
+[dependencies]
+iptv-core = { path = "../iptv-core" }
+anyhow = { workspace = true }
+axum = "0.7"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tikv-jemallocator = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+ureq = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
