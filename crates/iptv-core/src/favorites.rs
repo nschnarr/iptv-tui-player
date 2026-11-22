@@ -14,11 +14,7 @@ fn legacy_favorites_path() -> PathBuf {
 }
 
 fn dirs_fallback() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config").join("iptv")
-    } else {
-        PathBuf::from(".config").join("iptv")
-    }
+    crate::paths::data_dir()
 }
 
 /// Load favorites. These are stored as "name\tgroup" keys for stability
@@ -85,6 +81,7 @@ mod tests {
 
     #[test]
     fn test_favorite_key_format() {
+        let _guard = crate::paths::test_data_dir();
         assert_eq!(favorite_key("BBC One", "UK"), "BBC One\tUK");
         assert_eq!(favorite_key("", ""), "\t");
         assert_eq!(favorite_key("CNN", "News"), "CNN\tNews");
@@ -92,6 +89,7 @@ mod tests {
 
     #[test]
     fn test_favorite_key_tab_separator() {
+        let _guard = crate::paths::test_data_dir();
         let key = favorite_key("Channel Name", "Group Name");
         assert!(key.contains('\t'));
         let parts: Vec<&str> = key.split('\t').collect();
@@ -102,6 +100,7 @@ mod tests {
 
     #[test]
     fn test_migrate_empty_favorites() {
+        let _guard = crate::paths::test_data_dir();
         let empty: HashSet<String> = HashSet::new();
         let channels = vec![("ch1".into(), "g1".into(), "http://a".into())];
         assert!(migrate_if_needed(&empty, &channels).is_none());
@@ -109,6 +108,7 @@ mod tests {
 
     #[test]
     fn test_migrate_already_migrated() {
+        let _guard = crate::paths::test_data_dir();
         let mut favs = HashSet::new();
         favs.insert("BBC One\tUK".to_string());
         let channels = vec![("BBC One".into(), "UK".into(), "http://bbc".into())];
@@ -118,14 +118,27 @@ mod tests {
 
     #[test]
     fn test_migrate_url_favorites() {
+        let _guard = crate::paths::test_data_dir();
         let mut favs = HashSet::new();
         favs.insert("http://example.com/stream1".to_string());
         favs.insert("http://example.com/stream2".to_string());
 
         let channels = vec![
-            ("BBC One".to_string(), "UK".to_string(), "http://example.com/stream1".to_string()),
-            ("CNN".to_string(), "News".to_string(), "http://example.com/stream2".to_string()),
-            ("ESPN".to_string(), "Sports".to_string(), "http://example.com/stream3".to_string()),
+            (
+                "BBC One".to_string(),
+                "UK".to_string(),
+                "http://example.com/stream1".to_string(),
+            ),
+            (
+                "CNN".to_string(),
+                "News".to_string(),
+                "http://example.com/stream2".to_string(),
+            ),
+            (
+                "ESPN".to_string(),
+                "Sports".to_string(),
+                "http://example.com/stream3".to_string(),
+            ),
         ];
 
         let result = migrate_if_needed(&favs, &channels);
@@ -139,6 +152,7 @@ mod tests {
 
     #[test]
     fn test_migrate_unmatched_urls_dropped() {
+        let _guard = crate::paths::test_data_dir();
         let mut favs = HashSet::new();
         favs.insert("http://dead-link.com/gone".to_string());
         let channels = vec![("Ch1".into(), "G1".into(), "http://other.com".into())];
@@ -149,6 +163,7 @@ mod tests {
 
     #[test]
     fn test_save_load_roundtrip() {
+        let _guard = crate::paths::test_data_dir();
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("favorites.json");
         let mut favs = HashSet::new();
@@ -158,9 +173,8 @@ mod tests {
         let json = serde_json::to_string_pretty(&favs).unwrap();
         std::fs::write(&path, &json).unwrap();
 
-        let loaded: HashSet<String> = serde_json::from_str(
-            &std::fs::read_to_string(&path).unwrap()
-        ).unwrap();
+        let loaded: HashSet<String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(favs, loaded);
     }
 }

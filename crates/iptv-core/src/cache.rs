@@ -11,11 +11,7 @@ struct CacheMeta {
 }
 
 fn config_dir() -> PathBuf {
-    if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config").join("iptv")
-    } else {
-        PathBuf::from(".config").join("iptv")
-    }
+    crate::paths::data_dir()
 }
 
 fn cache_dir() -> PathBuf {
@@ -174,12 +170,14 @@ mod tests {
     use super::*;
     #[test]
     fn test_cache_stale_missing_file() {
+        let _guard = crate::paths::test_data_dir();
         let p = PathBuf::from("/tmp/nonexistent_iptv_cache_test_file");
         assert!(cache_stale(&p, 24.0));
     }
 
     #[test]
     fn test_cache_stale_fresh_file() {
+        let _guard = crate::paths::test_data_dir();
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("fresh.m3u");
         std::fs::write(&p, b"#EXTM3U\n").unwrap();
@@ -189,6 +187,7 @@ mod tests {
 
     #[test]
     fn test_cache_stale_zero_hours() {
+        let _guard = crate::paths::test_data_dir();
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("zero.m3u");
         std::fs::write(&p, b"data").unwrap();
@@ -200,12 +199,14 @@ mod tests {
 
     #[test]
     fn test_age_string_missing_file() {
+        let _guard = crate::paths::test_data_dir();
         let p = PathBuf::from("/tmp/nonexistent_iptv_age_test");
         assert!(age_string(&p).is_none());
     }
 
     #[test]
     fn test_age_string_just_created() {
+        let _guard = crate::paths::test_data_dir();
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("age.txt");
         std::fs::write(&p, b"x").unwrap();
@@ -216,6 +217,7 @@ mod tests {
 
     #[test]
     fn test_save_and_load_playlist() {
+        let _guard = crate::paths::test_data_dir();
         // Uses real config dir — just verify the functions don't panic
         let data = b"#EXTM3U\n#EXTINF:-1,Test\nhttp://example.com/stream\n";
         save_playlist(data, Some("http://test"));
@@ -225,6 +227,7 @@ mod tests {
 
     #[test]
     fn test_save_and_load_epg() {
+        let _guard = crate::paths::test_data_dir();
         let data = b"<?xml version=\"1.0\"?><tv></tv>";
         save_epg(data, Some("http://test"));
         let path = load_epg_path();
@@ -233,6 +236,7 @@ mod tests {
 
     #[test]
     fn test_playlist_cache_age_exists() {
+        let _guard = crate::paths::test_data_dir();
         save_playlist(b"test", None);
         let age = playlist_cache_age();
         assert!(age.is_some());
@@ -240,6 +244,7 @@ mod tests {
 
     #[test]
     fn test_epg_cache_stale_large_window() {
+        let _guard = crate::paths::test_data_dir();
         save_epg(b"test", None);
         // Just saved, should not be stale at 9999 hours
         assert!(!epg_cache_stale(9999.0));
@@ -247,6 +252,7 @@ mod tests {
 
     #[test]
     fn test_source_change_detection() {
+        let _guard = crate::paths::test_data_dir();
         // Single test to avoid parallel race on shared cache_meta.json
 
         // Playlist: same URL → not changed

@@ -1,24 +1,35 @@
+[workspace]
+members = [".", "crates/iptv-core", "crates/iptv-server"]
+resolver = "2"
+
+[workspace.dependencies]
+anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tikv-jemallocator = "0.6"
+ureq = "2"
+
 [package]
 name = "iptv"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tikv-jemallocator = "0.6"
+iptv-core = { path = "crates/iptv-core" }
+tikv-jemallocator = { workspace = true }
 ratatui = "0.29"
 crossterm = "0.28"
-nucleo = "0.5"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-anyhow = "1"
-ureq = "2"
-quick-xml = "0.37"
-chrono = { version = "0.4", features = ["serde"] }
-chrono-tz = "0.10"
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+ureq = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
 dirs = "5"
-thiserror = "2"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-tempfile = "3"
+tempfile = { workspace = true }

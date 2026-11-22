@@ -64,19 +64,40 @@ mod tests {
         pl.groups = vec![uk.clone(), news.clone()];
         pl.channels = vec![
             Channel {
-                name: Arc::from("BBC One"), url: Arc::from("http://bbc1"),
-                group: uk.clone(), logo_url: None, tvg_id: None, tvg_name: None,
-                tvg_language: None, tvg_country: None, content_type: ContentType::Live, index: 0,
+                name: Arc::from("BBC One"),
+                url: Arc::from("http://bbc1"),
+                group: uk.clone(),
+                logo_url: None,
+                tvg_id: None,
+                tvg_name: None,
+                tvg_language: None,
+                tvg_country: None,
+                content_type: ContentType::Live,
+                index: 0,
             },
             Channel {
-                name: Arc::from("BBC Two"), url: Arc::from("http://bbc2"),
-                group: uk.clone(), logo_url: None, tvg_id: None, tvg_name: None,
-                tvg_language: None, tvg_country: None, content_type: ContentType::Live, index: 1,
+                name: Arc::from("BBC Two"),
+                url: Arc::from("http://bbc2"),
+                group: uk.clone(),
+                logo_url: None,
+                tvg_id: None,
+                tvg_name: None,
+                tvg_language: None,
+                tvg_country: None,
+                content_type: ContentType::Live,
+                index: 1,
             },
             Channel {
-                name: Arc::from("CNN"), url: Arc::from("http://cnn"),
-                group: news.clone(), logo_url: None, tvg_id: None, tvg_name: None,
-                tvg_language: None, tvg_country: None, content_type: ContentType::Live, index: 2,
+                name: Arc::from("CNN"),
+                url: Arc::from("http://cnn"),
+                group: news.clone(),
+                logo_url: None,
+                tvg_id: None,
+                tvg_name: None,
+                tvg_language: None,
+                tvg_country: None,
+                content_type: ContentType::Live,
+                index: 2,
             },
         ];
         pl.group_indices.insert(uk, vec![0, 1]);
@@ -109,9 +130,21 @@ mod tests {
         assert_eq!(ContentType::Live, ContentType::Live);
         assert_eq!(ContentType::Movie, ContentType::Movie);
         assert_ne!(ContentType::Live, ContentType::Movie);
-        let s1 = ContentType::Series { series_name: Arc::from("X"), season: 1, episode: 1 };
-        let s2 = ContentType::Series { series_name: Arc::from("X"), season: 1, episode: 1 };
-        let s3 = ContentType::Series { series_name: Arc::from("Y"), season: 1, episode: 1 };
+        let s1 = ContentType::Series {
+            series_name: Arc::from("X"),
+            season: 1,
+            episode: 1,
+        };
+        let s2 = ContentType::Series {
+            series_name: Arc::from("X"),
+            season: 1,
+            episode: 1,
+        };
+        let s3 = ContentType::Series {
+            series_name: Arc::from("Y"),
+            season: 1,
+            episode: 1,
+        };
         assert_eq!(s1, s2);
         assert_ne!(s1, s3);
     }

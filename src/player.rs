@@ -57,7 +57,10 @@ pub fn launch(player: Player, url: &str, log: &AppLog) -> Result<()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .context(format!("Failed to launch {}. Is it installed?", player_name))?;
+        .context(format!(
+            "Failed to launch {}. Is it installed?",
+            player_name
+        ))?;
 
     // Spawn threads to read stdout/stderr and pipe to app log
     let log_out = log.clone();

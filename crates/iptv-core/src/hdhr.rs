@@ -1,3 +1,4 @@
+use crate::channel_numbers::ChannelNumbers;
 use crate::epg::Epg;
 use crate::favorites;
 use crate::model::Playlist;
@@ -19,6 +20,7 @@ pub enum BufferMode {
 }
 
 impl BufferMode {
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> anyhow::Result<Self> {
         match s.to_lowercase().as_str() {
             "none" | "raw" => Ok(Self::None),
@@ -28,11 +30,40 @@ impl BufferMode {
     }
 }
 
-const DEVICE_ID: &str = "12345678";
 const FIRMWARE_NAME: &str = "iptv-tui";
 const FIRMWARE_VERSION: &str = "0.1.0";
 const MODEL_NUMBER: &str = "HDTC-2US";
-const TUNER_COUNT: u32 = 2;
+
+/// Identity the emulated tuner reports to Plex/Jellyfin.
+#[derive(Debug, Clone)]
+pub struct DeviceInfo {
+    /// Plex identifies the tuner by this ID; keep it stable across restarts.
+    pub device_id: String,
+    pub friendly_name: String,
+    /// Max concurrent streams Plex will attempt (match your provider's limit).
+    pub tuner_count: u32,
+}
+
+impl Default for DeviceInfo {
+    fn default() -> Self {
+        Self {
+            device_id: "12345678".to_string(),
+            friendly_name: "IPTV TUI".to_string(),
+            tuner_count: 2,
+        }
+    }
+}
+
+/// A favourite channel exposed by the tuner.
+#[derive(Debug, Clone, Serialize)]
+pub struct LineupChannel {
+    pub number: u32,
+    /// Index into `playlist.channels`.
+    #[serde(skip)]
+    pub index: usize,
+    pub name: String,
+    pub group: String,
+}
 
 #[derive(Serialize)]
 struct DiscoverResponse {
@@ -80,13 +111,94 @@ struct LineupEntry {
     url: String,
 }
 
-/// Shared state for the HDHR server — favorites can change at runtime.
+/// Shared state for the HDHR server — playlist, favorites and EPG can change
+/// at runtime. Playlist/favorites are private so every change goes through a
+/// setter that rebuilds the numbered lineup.
 pub struct HdhrState {
-    pub playlist: Arc<Playlist>,
-    pub favorites: HashSet<String>,
+    playlist: Arc<Playlist>,
+    favorites: HashSet<String>,
+    numbers: ChannelNumbers,
+    /// Favourite channels present in the playlist, sorted by guide number.
+    lineup: Vec<LineupChannel>,
     pub epg: Option<Arc<Epg>>,
     pub buffer_mode: BufferMode,
     pub buffer_secs: f64,
+    pub device: DeviceInfo,
+}
+
+impl HdhrState {
+    pub fn new(
+        playlist: Arc<Playlist>,
+        favorites: HashSet<String>,
+        epg: Option<Arc<Epg>>,
+        buffer_mode: BufferMode,
+        buffer_secs: f64,
+        numbers: ChannelNumbers,
+    ) -> Self {
+        let mut state = Self {
+            playlist,
+            favorites,
+            numbers,
+            lineup: Vec::new(),
+            epg,
+            buffer_mode,
+            buffer_secs,
+            device: DeviceInfo::default(),
+        };
+        state.rebuild_lineup();
+        state
+    }
+
+    pub fn playlist(&self) -> &Arc<Playlist> {
+        &self.playlist
+    }
+
+    pub fn favorites(&self) -> &HashSet<String> {
+        &self.favorites
+    }
+
+    pub fn lineup(&self) -> &[LineupChannel] {
+        &self.lineup
+    }
+
+    pub fn set_playlist(&mut self, playlist: Arc<Playlist>) {
+        self.playlist = playlist;
+        self.rebuild_lineup();
+    }
+
+    pub fn set_favorites(&mut self, favorites: HashSet<String>) {
+        self.favorites = favorites;
+        self.rebuild_lineup();
+    }
+
+    fn rebuild_lineup(&mut self) {
+        // First playlist entry wins for each favourite key (playlists often
+        // contain duplicate name+group entries).
+        let mut seen = HashSet::new();
+        let mut matched: Vec<(String, usize)> = Vec::new();
+        for (idx, ch) in self.playlist.channels.iter().enumerate() {
+            let key = favorites::favorite_key(&ch.name, &ch.group);
+            if self.favorites.contains(&key) && seen.insert(key.clone()) {
+                matched.push((key, idx));
+            }
+        }
+        self.numbers
+            .assign_all(matched.iter().map(|(k, _)| k.as_str()));
+        let mut lineup: Vec<LineupChannel> = matched
+            .into_iter()
+            .filter_map(|(key, idx)| {
+                let ch = &self.playlist.channels[idx];
+                Some(LineupChannel {
+                    number: self.numbers.get(&key)?,
+                    index: idx,
+                    name: ch.name.to_string(),
+                    group: ch.group.to_string(),
+                })
+            })
+            .collect();
+        lineup.sort_by_key(|c| c.number);
+        self.lineup = lineup;
+    }
 }
 
 pub struct HdhrServer {
@@ -96,12 +208,33 @@ pub struct HdhrServer {
 }
 
 impl HdhrServer {
-    pub fn new(port: u16, bind_addr: String, playlist: Arc<Playlist>, favorites: HashSet<String>, epg: Option<Arc<Epg>>, buffer_mode: BufferMode, buffer_secs: f64) -> Self {
+    pub fn new(
+        port: u16,
+        bind_addr: String,
+        playlist: Arc<Playlist>,
+        favorites: HashSet<String>,
+        epg: Option<Arc<Epg>>,
+        buffer_mode: BufferMode,
+        buffer_secs: f64,
+    ) -> Self {
         Self {
             port,
             bind_addr,
-            state: Arc::new(Mutex::new(HdhrState { playlist, favorites, epg, buffer_mode, buffer_secs })),
+            state: Arc::new(Mutex::new(HdhrState::new(
+                playlist,
+                favorites,
+                epg,
+                buffer_mode,
+                buffer_secs,
+                ChannelNumbers::load(),
+            ))),
         }
+    }
+
+    /// Override the identity reported to Plex (ID, name, tuner count).
+    pub fn with_device(self, device: DeviceInfo) -> Self {
+        self.state.lock().unwrap().device = device;
+        self
     }
 
     /// Get a handle to update favorites at runtime.
@@ -157,7 +290,10 @@ fn handle_connection(
         if line.trim().is_empty() {
             break;
         }
-        if let Some(h) = line.strip_prefix("Host: ").or_else(|| line.strip_prefix("host: ")) {
+        if let Some(h) = line
+            .strip_prefix("Host: ")
+            .or_else(|| line.strip_prefix("host: "))
+        {
             host = h.trim().to_string();
         }
     }
@@ -165,17 +301,18 @@ fn handle_connection(
     match path.as_str() {
         "/discover.json" => {
             let base_url = format!("http://{}", host);
+            let device = state.lock().unwrap().device.clone();
             let resp = DiscoverResponse {
-                friendly_name: "IPTV TUI".to_string(),
+                friendly_name: device.friendly_name,
                 manufacturer: "iptv-tui".to_string(),
                 model_number: MODEL_NUMBER.to_string(),
                 firmware_name: FIRMWARE_NAME.to_string(),
                 firmware_version: FIRMWARE_VERSION.to_string(),
-                device_id: DEVICE_ID.to_string(),
-                device_auth: DEVICE_ID.to_string(),
+                device_id: device.device_id.clone(),
+                device_auth: device.device_id,
                 base_url: base_url.clone(),
                 lineup_url: format!("{}/lineup.json", base_url),
-                tuner_count: TUNER_COUNT,
+                tuner_count: device.tuner_count,
             };
             send_json(&mut stream, &resp)?;
         }
@@ -197,7 +334,11 @@ fn handle_connection(
             if let Ok(num) = channel_num.parse::<usize>() {
                 let (url, buffer_mode, buffer_secs) = {
                     let s = state.lock().unwrap();
-                    (get_channel_url_inner(&s, num), s.buffer_mode.clone(), s.buffer_secs)
+                    (
+                        get_channel_url_inner(&s, num),
+                        s.buffer_mode.clone(),
+                        s.buffer_secs,
+                    )
                 };
                 if let Some(url) = url {
                     match buffer_mode {
@@ -221,13 +362,14 @@ fn handle_connection(
             stream.write_all(response.as_bytes())?;
         }
         "/device.xml" => {
+            let device = state.lock().unwrap().device.clone();
             let xml = format!(
                 r#"<?xml version="1.0"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
   <specVersion><major>1</major><minor>0</minor></specVersion>
   <device>
     <deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>
-    <friendlyName>IPTV TUI</friendlyName>
+    <friendlyName>{}</friendlyName>
     <manufacturer>iptv-tui</manufacturer>
     <modelName>{}</modelName>
     <modelNumber>{}</modelNumber>
@@ -235,7 +377,11 @@ fn handle_connection(
     <UDN>uuid:{}</UDN>
   </device>
 </root>"#,
-                MODEL_NUMBER, FIRMWARE_VERSION, DEVICE_ID, DEVICE_ID
+                xml_escape(&device.friendly_name),
+                MODEL_NUMBER,
+                FIRMWARE_VERSION,
+                xml_escape(&device.device_id),
+                xml_escape(&device.device_id)
             );
             let response = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -259,17 +405,26 @@ fn ffmpeg_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow:
     let mut child = Command::new("ffmpeg")
         .args([
             "-hide_banner",
-            "-loglevel", "error",
+            "-loglevel",
+            "error",
             // Input options
-            "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "-reconnect", "1",
-            "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
-            "-i", url,
+            "-user_agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "-reconnect",
+            "1",
+            "-reconnect_streamed",
+            "1",
+            "-reconnect_delay_max",
+            "5",
+            "-i",
+            url,
             // Output options: copy codecs (no re-encoding), output MPEG-TS to stdout
-            "-c", "copy",
-            "-f", "mpegts",
-            "-metadata", "service_name=IPTV",
+            "-c",
+            "copy",
+            "-f",
+            "mpegts",
+            "-metadata",
+            "service_name=IPTV",
             "pipe:1",
         ])
         .stdout(Stdio::piped())
@@ -277,7 +432,10 @@ fn ffmpeg_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow:
         .stdin(Stdio::null())
         .spawn()?;
 
-    let mut stdout = child.stdout.take().expect("failed to capture ffmpeg stdout");
+    let mut stdout = child
+        .stdout
+        .take()
+        .expect("failed to capture ffmpeg stdout");
 
     // Pre-roll: accumulate data for buffer_secs before sending anything
     let preroll = prebuffer(&mut stdout, buffer_secs);
@@ -324,7 +482,10 @@ fn ffmpeg_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow:
 /// We fetch the stream ourselves with proper headers and pipe it through.
 fn proxy_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow::Result<()> {
     let response = ureq::get(url)
-        .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .set(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .set("Accept", "*/*")
         .set("Connection", "keep-alive")
         .call()?;
@@ -414,22 +575,16 @@ fn write_chunk(client: &mut TcpStream, data: &[u8]) -> std::io::Result<()> {
 
 fn build_lineup(state: &Arc<Mutex<HdhrState>>, host: &str) -> Vec<LineupEntry> {
     let state = state.lock().unwrap();
-    let mut entries = Vec::new();
-    let mut channel_num = 1;
-
-    for channel in &state.playlist.channels {
-        if state.favorites.contains(&favorites::favorite_key(&channel.name, &channel.group)) {
-            entries.push(LineupEntry {
-                guide_number: format!("{}", channel_num),
-                guide_name: channel.name.to_string(),
-                // Proxy URL — stream goes through our server with proper headers
-                url: format!("http://{}/auto/v{}", host, channel_num),
-            });
-            channel_num += 1;
-        }
-    }
-
-    entries
+    state
+        .lineup
+        .iter()
+        .map(|c| LineupEntry {
+            guide_number: c.number.to_string(),
+            guide_name: c.name.clone(),
+            // Proxy URL — stream goes through our server with proper headers
+            url: format!("http://{}/auto/v{}", host, c.number),
+        })
+        .collect()
 }
 
 /// Build XMLTV EPG data for favorited channels.
@@ -438,16 +593,8 @@ fn build_xmltv(state: &Arc<Mutex<HdhrState>>) -> String {
 
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<tv>\n");
 
-    // Collect favorited channels with their guide numbers
-    let mut channel_num = 1u32;
-    let mut fav_channels: Vec<(u32, usize)> = Vec::new(); // (guide_number, channel_idx)
-
-    for (idx, channel) in state.playlist.channels.iter().enumerate() {
-        if state.favorites.contains(&favorites::favorite_key(&channel.name, &channel.group)) {
-            fav_channels.push((channel_num, idx));
-            channel_num += 1;
-        }
-    }
+    let fav_channels: Vec<(u32, usize)> =
+        state.lineup.iter().map(|c| (c.number, c.index)).collect();
 
     // Write channel definitions
     for &(num, idx) in &fav_channels {
@@ -489,16 +636,11 @@ fn build_xmltv(state: &Arc<Mutex<HdhrState>>) -> String {
 }
 
 fn get_channel_url_inner(state: &HdhrState, channel_num: usize) -> Option<String> {
-    let mut num = 1;
-    for channel in &state.playlist.channels {
-        if state.favorites.contains(&favorites::favorite_key(&channel.name, &channel.group)) {
-            if num == channel_num {
-                return Some(channel.url.to_string());
-            }
-            num += 1;
-        }
-    }
-    None
+    state
+        .lineup
+        .iter()
+        .find(|c| c.number as usize == channel_num)
+        .map(|c| state.playlist.channels[c.index].url.to_string())
 }
 
 fn send_json<T: Serialize>(stream: &mut TcpStream, data: &T) -> anyhow::Result<()> {
@@ -548,20 +690,30 @@ mod tests {
     }
 
     fn make_state(channels: Vec<Channel>, favs: Vec<&str>) -> Arc<Mutex<HdhrState>> {
-        let groups: Vec<Arc<str>> = channels.iter().map(|c| c.group.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect();
+        let groups: Vec<Arc<str>> = channels
+            .iter()
+            .map(|c| c.group.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
         let mut group_indices: HashMap<Arc<str>, Vec<usize>> = HashMap::new();
         for (i, ch) in channels.iter().enumerate() {
             group_indices.entry(ch.group.clone()).or_default().push(i);
         }
-        let playlist = Playlist { channels, groups, group_indices };
+        let playlist = Playlist {
+            channels,
+            groups,
+            group_indices,
+        };
         let favorites: HashSet<String> = favs.into_iter().map(|s| s.to_string()).collect();
-        Arc::new(Mutex::new(HdhrState {
-            playlist: Arc::new(playlist),
+        Arc::new(Mutex::new(HdhrState::new(
+            Arc::new(playlist),
             favorites,
-            epg: None,
-            buffer_mode: BufferMode::None,
-            buffer_secs: 0.0,
-        }))
+            None,
+            BufferMode::None,
+            0.0,
+            ChannelNumbers::in_memory(),
+        )))
     }
 
     // --- BufferMode ---
@@ -594,8 +746,10 @@ mod tests {
 
     #[test]
     fn test_xml_escape_special_chars() {
-        assert_eq!(xml_escape("A & B < C > D \"E\" 'F'"),
-                   "A &amp; B &lt; C &gt; D &quot;E&quot; &apos;F&apos;");
+        assert_eq!(
+            xml_escape("A & B < C > D \"E\" 'F'"),
+            "A &amp; B &lt; C &gt; D &quot;E&quot; &apos;F&apos;"
+        );
     }
 
     #[test]
@@ -631,6 +785,46 @@ mod tests {
         assert_eq!(lineup[0].url, "http://myhost:5004/auto/v1");
         assert_eq!(lineup[1].guide_name, "ESPN");
         assert_eq!(lineup[1].guide_number, "2");
+    }
+
+    #[test]
+    fn test_lineup_numbers_stable_when_adding_favorites() {
+        let ch1 = make_channel("CNN", "News", "http://cnn.stream", None);
+        let ch2 = make_channel("BBC", "News", "http://bbc.stream", None);
+        let ch3 = make_channel("ESPN", "Sports", "http://espn.stream", None);
+        let cnn = favorites::favorite_key("CNN", "News");
+        let bbc = favorites::favorite_key("BBC", "News");
+        let espn = favorites::favorite_key("ESPN", "Sports");
+        let state = make_state(vec![ch1, ch2, ch3], vec![&cnn, &espn]);
+
+        // BBC sits between CNN and ESPN in the playlist; favouriting it must
+        // not renumber ESPN (Plex's channel map depends on these numbers).
+        let favs: HashSet<String> = [&cnn, &bbc, &espn].iter().map(|s| s.to_string()).collect();
+        state.lock().unwrap().set_favorites(favs);
+        let lineup = build_lineup(&state, "h");
+        let nums: Vec<(&str, &str)> = lineup
+            .iter()
+            .map(|e| (e.guide_name.as_str(), e.guide_number.as_str()))
+            .collect();
+        assert_eq!(nums, vec![("CNN", "1"), ("ESPN", "2"), ("BBC", "3")]);
+        assert_eq!(
+            get_channel_url_inner(&state.lock().unwrap(), 2).unwrap(),
+            "http://espn.stream"
+        );
+    }
+
+    #[test]
+    fn test_lineup_dedupes_duplicate_channels() {
+        let a = make_channel("CNN", "News", "http://cnn.a", None);
+        let b = make_channel("CNN", "News", "http://cnn.b", None);
+        let cnn = favorites::favorite_key("CNN", "News");
+        let state = make_state(vec![a, b], vec![&cnn]);
+        let lineup = build_lineup(&state, "h");
+        assert_eq!(lineup.len(), 1);
+        assert_eq!(
+            get_channel_url_inner(&state.lock().unwrap(), 1).unwrap(),
+            "http://cnn.a"
+        );
     }
 
     // --- get_channel_url_inner ---

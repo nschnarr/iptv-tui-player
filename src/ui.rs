@@ -198,7 +198,11 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
         }
         _ => {
             let left = if !app.search_query.is_empty() && !app.search_results.is_empty() {
-                format!(" 🔍 {} ({} results) — Enter play  s fav  Esc clear  / new search", app.search_query, app.search_results.len())
+                format!(
+                    " 🔍 {} ({} results) — Enter play  s fav  Esc clear  / new search",
+                    app.search_query,
+                    app.search_results.len()
+                )
             } else if let Some(msg) = &app.status_message {
                 format!(" {msg}")
             } else {
@@ -213,11 +217,7 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
             let right = format!(
                 "{}{}  {} channels  [{}] ",
                 dl_indicator,
-                if app.show_favorites_only {
-                    "★ "
-                } else {
-                    ""
-                },
+                if app.show_favorites_only { "★ " } else { "" },
                 app.playlist.channels.len(),
                 app.selected_player,
             );
@@ -274,7 +274,10 @@ fn draw_help_overlay(f: &mut Frame, app: &App) {
         Line::from("  ?               Toggle this help"),
         Line::from("  q               Quit"),
         Line::from(""),
-        Line::from(Span::styled("  Guide (G)", Style::default().fg(app.theme.highlight))),
+        Line::from(Span::styled(
+            "  Guide (G)",
+            Style::default().fg(app.theme.highlight),
+        )),
         Line::from("  r               Record selected programme"),
         Line::from("                  (schedules future, starts now if current)"),
         Line::from(""),
@@ -326,9 +329,9 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1), // time header
-            Constraint::Length(1), // now marker
-            Constraint::Min(1),   // channel rows
+            Constraint::Length(1),             // time header
+            Constraint::Length(1),             // now marker
+            Constraint::Min(1),                // channel rows
             Constraint::Length(status_height), // status
         ])
         .split(inner);
@@ -424,7 +427,11 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
         };
 
         // Channel name (truncated)
-        let name: String = ch.name.chars().take((channel_col_width - 2) as usize).collect();
+        let name: String = ch
+            .name
+            .chars()
+            .take((channel_col_width - 2) as usize)
+            .collect();
         let star = if app.is_favorite(ch_idx) { "★" } else { "" };
         let display_name = format!("{}{}", name, star);
         buf.set_string(inner.x, y, &display_name, name_style);
@@ -446,10 +453,9 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
                 let max_prog_idx = if progs.is_empty() { 0 } else { progs.len() - 1 };
 
                 for (pidx, prog) in progs.iter().enumerate() {
-                    let prog_start_min =
-                        (prog.start - time_start).num_minutes().max(0) as f64;
-                    let prog_end_min = ((prog.stop - time_start).num_minutes() as f64)
-                        .min(total_minutes);
+                    let prog_start_min = (prog.start - time_start).num_minutes().max(0) as f64;
+                    let prog_end_min =
+                        ((prog.stop - time_start).num_minutes() as f64).min(total_minutes);
                     let px_start = grid_x + (prog_start_min / total_minutes * grid_width) as u16;
                     let px_end = grid_x + (prog_end_min / total_minutes * grid_width) as u16;
                     let block_width = px_end.saturating_sub(px_start);
@@ -466,7 +472,9 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
                     let style = if is_prog_selected {
                         Style::default().bg(app.theme.info).fg(app.theme.text)
                     } else if is_now_playing {
-                        Style::default().bg(app.theme.selected_bg).fg(app.theme.text)
+                        Style::default()
+                            .bg(app.theme.selected_bg)
+                            .fg(app.theme.text)
                     } else {
                         Style::default().fg(app.theme.text_subtle)
                     };
@@ -478,8 +486,7 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
                     } else {
                         let avail = block_width as usize;
                         if avail > 3 {
-                            let truncated: String =
-                                prog.title.chars().take(avail - 1).collect();
+                            let truncated: String = prog.title.chars().take(avail - 1).collect();
                             truncated
                         } else {
                             prog.title.chars().take(avail).collect()
@@ -488,22 +495,22 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
 
                     // Draw separator between programmes first
                     if px_start > grid_x && px_start < inner.x + inner.width {
-                        buf.set_string(
-                            px_start,
-                            y,
-                            "│",
-                            Style::default().fg(app.theme.text_dim),
-                        );
+                        buf.set_string(px_start, y, "│", Style::default().fg(app.theme.text_dim));
                     }
 
                     // Fill the block background (skip separator position)
-                    let label_start = if px_start > grid_x { px_start + 1 } else { px_start };
+                    let label_start = if px_start > grid_x {
+                        px_start + 1
+                    } else {
+                        px_start
+                    };
                     for x in label_start..px_end.min(inner.x + inner.width) {
                         buf.set_string(x, y, " ", style);
                     }
                     // Write label (start after separator)
                     let label_chars: Vec<char> = label.chars().collect();
-                    let max_chars = block_width.saturating_sub(if px_start > grid_x { 1 } else { 0 }) as usize;
+                    let max_chars =
+                        block_width.saturating_sub(if px_start > grid_x { 1 } else { 0 }) as usize;
                     for (i, &c) in label_chars.iter().take(max_chars).enumerate() {
                         let x = label_start + i as u16;
                         if x < inner.x + inner.width {
@@ -513,12 +520,7 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
                 }
 
                 if progs.is_empty() {
-                    buf.set_string(
-                        grid_x,
-                        y,
-                        "—",
-                        Style::default().fg(app.theme.text_dim),
-                    );
+                    buf.set_string(grid_x, y, "—", Style::default().fg(app.theme.text_dim));
                 }
             } else {
                 buf.set_string(
@@ -547,7 +549,8 @@ fn draw_guide_overlay(f: &mut Frame, app: &App) {
     } else if let Some(ref msg) = app.status_message {
         format!(" {} | g/f/a views  [/] ←→ scroll  Esc close", msg)
     } else {
-        " / search  g/f/a views  []/<> ←→ scroll  s fav  r record  Enter play  Esc close".to_string()
+        " / search  g/f/a views  []/<> ←→ scroll  s fav  r record  Enter play  Esc close"
+            .to_string()
     };
 
     buf.set_string(
@@ -617,18 +620,24 @@ fn draw_series_overlay(f: &mut Frame, app: &App) {
                     let total = season.map(|s| s.episodes.len()).unwrap_or(0);
                     let dupes = total - unique;
                     let ep_str = if state.show_duplicates && dupes > 0 {
-                        format!("{} episode{}, {} dupe{}", total, if total == 1 { "" } else { "s" }, dupes, if dupes == 1 { "" } else { "s" })
+                        format!(
+                            "{} episode{}, {} dupe{}",
+                            total,
+                            if total == 1 { "" } else { "s" },
+                            dupes,
+                            if dupes == 1 { "" } else { "s" }
+                        )
                     } else if dupes > 0 {
-                        format!("{} episode{} (+{} hidden)", unique, if unique == 1 { "" } else { "s" }, dupes)
+                        format!(
+                            "{} episode{} (+{} hidden)",
+                            unique,
+                            if unique == 1 { "" } else { "s" },
+                            dupes
+                        )
                     } else {
                         format!("{} episode{}", unique, if unique == 1 { "" } else { "s" })
                     };
-                    let text = format!(
-                        "   {} Season {} ({})",
-                        arrow,
-                        season_num,
-                        ep_str,
-                    );
+                    let text = format!("   {} Season {} ({})", arrow, season_num, ep_str,);
                     let style = Style::default()
                         .fg(app.theme.highlight)
                         .add_modifier(Modifier::BOLD);
@@ -646,7 +655,10 @@ fn draw_series_overlay(f: &mut Frame, app: &App) {
                     let text = if state.show_duplicates {
                         let info = build_source_info(ch);
                         let label = if ep.is_duplicate { "dupe" } else { "primary" };
-                        format!("      S{:02}E{:02}  {} [{}:{}]", ep.season, ep.episode, ep.name, label, info)
+                        format!(
+                            "      S{:02}E{:02}  {} [{}:{}]",
+                            ep.season, ep.episode, ep.name, label, info
+                        )
                     } else {
                         format!("      S{:02}E{:02}  {}", ep.season, ep.episode, ep.name)
                     };
@@ -674,7 +686,10 @@ fn draw_series_overlay(f: &mut Frame, app: &App) {
         list_state.select(Some(state.selected));
     }
 
-    let visible_count = state.filtered_series.as_ref().map_or(state.tree.len(), |f| f.len());
+    let visible_count = state
+        .filtered_series
+        .as_ref()
+        .map_or(state.tree.len(), |f| f.len());
     let total_count = state.tree.len();
     let title = if state.filtered_series.is_some() {
         format!(" Series Browser ({}/{} shows) ", visible_count, total_count)
@@ -707,9 +722,30 @@ fn draw_series_overlay(f: &mut Frame, app: &App) {
         format!(" 🔍 {}_ ", state.search_query)
     } else {
         match state.visible_rows.get(state.selected) {
-            Some(SeriesRow::SeriesHeader { .. }) => format!(" / search  Enter expand  d download all  u {}dupes  Esc close", if state.show_duplicates { "hide " } else { "show " }),
-            Some(SeriesRow::SeasonHeader { .. }) => format!(" / search  Enter expand  d download season  u {}dupes  Esc close", if state.show_duplicates { "hide " } else { "show " }),
-            Some(SeriesRow::Episode { .. }) => format!(" / search  Enter play  d download  u {}dupes  h collapse  Esc close", if state.show_duplicates { "hide " } else { "show " }),
+            Some(SeriesRow::SeriesHeader { .. }) => format!(
+                " / search  Enter expand  d download all  u {}dupes  Esc close",
+                if state.show_duplicates {
+                    "hide "
+                } else {
+                    "show "
+                }
+            ),
+            Some(SeriesRow::SeasonHeader { .. }) => format!(
+                " / search  Enter expand  d download season  u {}dupes  Esc close",
+                if state.show_duplicates {
+                    "hide "
+                } else {
+                    "show "
+                }
+            ),
+            Some(SeriesRow::Episode { .. }) => format!(
+                " / search  Enter play  d download  u {}dupes  h collapse  Esc close",
+                if state.show_duplicates {
+                    "hide "
+                } else {
+                    "show "
+                }
+            ),
             None => " / search  Esc close".to_string(),
         }
     };
@@ -732,15 +768,25 @@ fn draw_downloads_overlay(f: &mut Frame, app: &App) {
     let inner_width = area.width.saturating_sub(4) as usize;
 
     // Count stats for title
-    let completed = queue.iter().filter(|e| matches!(e.status, DownloadStatus::Complete { .. })).count();
-    let active = queue.iter().filter(|e| matches!(e.status, DownloadStatus::Downloading { .. })).count();
+    let completed = queue
+        .iter()
+        .filter(|e| matches!(e.status, DownloadStatus::Complete { .. }))
+        .count();
+    let active = queue
+        .iter()
+        .filter(|e| matches!(e.status, DownloadStatus::Downloading { .. }))
+        .count();
 
     let items: Vec<ListItem> = queue
         .iter()
         .enumerate()
         .map(|(i, entry)| {
             let selected = i == app.downloads_selected;
-            let bg = if selected { app.theme.selected_bg } else { app.theme.surface };
+            let bg = if selected {
+                app.theme.selected_bg
+            } else {
+                app.theme.surface
+            };
 
             match &entry.status {
                 DownloadStatus::Queued => {
@@ -751,17 +797,27 @@ fn draw_downloads_overlay(f: &mut Frame, app: &App) {
                     ]);
                     ListItem::new(line1)
                 }
-                DownloadStatus::Downloading { bytes_downloaded, total_bytes, bytes_per_sec } => {
+                DownloadStatus::Downloading {
+                    bytes_downloaded,
+                    total_bytes,
+                    bytes_per_sec,
+                } => {
                     let dl_mb = *bytes_downloaded as f64 / 1_048_576.0;
                     let speed_str = match bytes_per_sec {
-                        Some(bps) if *bps > 1_048_576 => format!("{:.1} MB/s", *bps as f64 / 1_048_576.0),
+                        Some(bps) if *bps > 1_048_576 => {
+                            format!("{:.1} MB/s", *bps as f64 / 1_048_576.0)
+                        }
                         Some(bps) if *bps > 0 => format!("{:.0} KB/s", *bps as f64 / 1024.0),
                         _ => "".to_string(),
                     };
 
                     let (pct, size_str) = if let Some(total) = total_bytes {
                         let total_mb = *total as f64 / 1_048_576.0;
-                        let p = if *total > 0 { *bytes_downloaded as f64 / *total as f64 } else { 0.0 };
+                        let p = if *total > 0 {
+                            *bytes_downloaded as f64 / *total as f64
+                        } else {
+                            0.0
+                        };
                         (p, format!("{:.1}/{:.1} MB", dl_mb, total_mb))
                     } else {
                         (0.0, format!("{:.1} MB", dl_mb))
@@ -777,8 +833,14 @@ fn draw_downloads_overlay(f: &mut Frame, app: &App) {
                     };
                     let line1 = Line::from(vec![
                         Span::styled("  ", Style::default().bg(bg)),
-                        Span::styled(&entry.item.name, Style::default().fg(app.theme.highlight).bg(bg)),
-                        Span::styled(speed_display, Style::default().fg(app.theme.highlight).bg(bg)),
+                        Span::styled(
+                            &entry.item.name,
+                            Style::default().fg(app.theme.highlight).bg(bg),
+                        ),
+                        Span::styled(
+                            speed_display,
+                            Style::default().fg(app.theme.highlight).bg(bg),
+                        ),
                     ]);
 
                     // Line 2: full-width progress bar
@@ -790,40 +852,64 @@ fn draw_downloads_overlay(f: &mut Frame, app: &App) {
 
                     let line2 = Line::from(vec![
                         Span::styled("  ", Style::default().bg(bg)),
-                        Span::styled(bar_filled_str, Style::default().fg(app.theme.progress).bg(bg)),
-                        Span::styled(bar_empty_str, Style::default().fg(app.theme.progress_empty).bg(bg)),
+                        Span::styled(
+                            bar_filled_str,
+                            Style::default().fg(app.theme.progress).bg(bg),
+                        ),
+                        Span::styled(
+                            bar_empty_str,
+                            Style::default().fg(app.theme.progress_empty).bg(bg),
+                        ),
                     ]);
 
-                    let line3 = Line::from(vec![
-                        Span::styled(format!("  {} {}", pct_str, size_str), Style::default().fg(app.theme.highlight).bg(bg)),
-                    ]);
+                    let line3 = Line::from(vec![Span::styled(
+                        format!("  {} {}", pct_str, size_str),
+                        Style::default().fg(app.theme.highlight).bg(bg),
+                    )]);
 
                     ListItem::new(vec![line1, line2, line3])
                 }
                 DownloadStatus::Complete { path } => {
-                    let fname = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+                    let fname = path
+                        .file_name()
+                        .map(|f| f.to_string_lossy().to_string())
+                        .unwrap_or_default();
                     let bar_str: String = "━".repeat(inner_width.saturating_sub(2));
                     let line1 = Line::from(vec![
                         Span::styled("  ", Style::default().bg(bg)),
-                        Span::styled(&entry.item.name, Style::default().fg(app.theme.success).bg(bg)),
+                        Span::styled(
+                            &entry.item.name,
+                            Style::default().fg(app.theme.success).bg(bg),
+                        ),
                     ]);
                     let line2 = Line::from(vec![
                         Span::styled("  ", Style::default().bg(bg)),
                         Span::styled(bar_str, Style::default().fg(app.theme.success).bg(bg)),
                     ]);
-                    let line3 = Line::from(vec![
-                        Span::styled(format!("  {}", fname), Style::default().fg(app.theme.text_dim).bg(bg)),
-                    ]);
+                    let line3 = Line::from(vec![Span::styled(
+                        format!("  {}", fname),
+                        Style::default().fg(app.theme.text_dim).bg(bg),
+                    )]);
                     ListItem::new(vec![line1, line2, line3])
                 }
                 DownloadStatus::Failed { error } => {
                     let line1 = Line::from(vec![
-                        Span::styled(" FAIL ", Style::default().fg(app.theme.error).bg(bg).add_modifier(Modifier::BOLD)),
-                        Span::styled(&entry.item.name, Style::default().fg(app.theme.error).bg(bg)),
+                        Span::styled(
+                            " FAIL ",
+                            Style::default()
+                                .fg(app.theme.error)
+                                .bg(bg)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(
+                            &entry.item.name,
+                            Style::default().fg(app.theme.error).bg(bg),
+                        ),
                     ]);
-                    let line2 = Line::from(vec![
-                        Span::styled(format!("  {}", error), Style::default().fg(app.theme.text_dim).bg(bg)),
-                    ]);
+                    let line2 = Line::from(vec![Span::styled(
+                        format!("  {}", error),
+                        Style::default().fg(app.theme.text_dim).bg(bg),
+                    )]);
                     ListItem::new(vec![line1, line2])
                 }
             }
@@ -836,7 +922,12 @@ fn draw_downloads_overlay(f: &mut Frame, app: &App) {
     }
 
     let title = if active > 0 {
-        format!(" Downloads ({}/{} complete, {} active) ", completed, queue.len(), active)
+        format!(
+            " Downloads ({}/{} complete, {} active) ",
+            completed,
+            queue.len(),
+            active
+        )
     } else {
         format!(" Downloads ({}/{} complete) ", completed, queue.len())
     };
@@ -901,7 +992,11 @@ fn draw_source_info_overlay(f: &mut Frame, app: &App) {
     };
 
     let epg_stats = if let Some(ref epg) = app.epg {
-        format!("{} programmes, {} channels", epg.programme_count(), epg.channel_count())
+        format!(
+            "{} programmes, {} channels",
+            epg.programme_count(),
+            epg.channel_count()
+        )
     } else {
         "not loaded".to_string()
     };
@@ -924,13 +1019,19 @@ fn draw_source_info_overlay(f: &mut Frame, app: &App) {
         Line::from(""),
         Line::from(Span::styled(
             "  Source Information",
-            Style::default().fg(app.theme.accent).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(app.theme.accent)
+                .add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
         Line::from(vec![
             Span::styled("  Playlist:  ", Style::default().fg(app.theme.accent)),
             Span::styled(
-                format!("{} channels, {} groups", app.playlist.channels.len(), app.playlist.groups.len()),
+                format!(
+                    "{} channels, {} groups",
+                    app.playlist.channels.len(),
+                    app.playlist.groups.len()
+                ),
                 Style::default().fg(app.theme.text),
             ),
         ]),
@@ -956,7 +1057,10 @@ fn draw_source_info_overlay(f: &mut Frame, app: &App) {
             Span::styled(&epg_cache, Style::default().fg(app.theme.text)),
         ]),
         Line::from(""),
-        Line::from(Span::styled(refresh_status, Style::default().fg(app.theme.accent))),
+        Line::from(Span::styled(
+            refresh_status,
+            Style::default().fg(app.theme.accent),
+        )),
     ];
 
     let block = Paragraph::new(lines).block(
@@ -987,21 +1091,35 @@ fn draw_recordings_overlay(f: &mut Frame, app: &App) {
     let recs = app.recorder.snapshot();
     let now = Utc::now();
 
-    let active_count = recs.iter().filter(|r| r.status == RecordingStatus::Recording).count();
-    let scheduled_count = recs.iter().filter(|r| r.status == RecordingStatus::Scheduled).count();
+    let active_count = recs
+        .iter()
+        .filter(|r| r.status == RecordingStatus::Recording)
+        .count();
+    let scheduled_count = recs
+        .iter()
+        .filter(|r| r.status == RecordingStatus::Scheduled)
+        .count();
 
     let items: Vec<ListItem> = recs
         .iter()
         .enumerate()
         .map(|(i, rec)| {
             let selected = i == app.recordings_selected;
-            let bg = if selected { app.theme.selected_bg } else { app.theme.surface };
+            let bg = if selected {
+                app.theme.selected_bg
+            } else {
+                app.theme.surface
+            };
 
             let (icon, status_text, color) = match &rec.status {
                 RecordingStatus::Scheduled => {
                     let starts_in = rec.start - now;
                     let mins = starts_in.num_minutes().max(0);
-                    ("⏰", format!("starts in {}h{}m", mins / 60, mins % 60), app.theme.highlight)
+                    (
+                        "⏰",
+                        format!("starts in {}h{}m", mins / 60, mins % 60),
+                        app.theme.highlight,
+                    )
                 }
                 RecordingStatus::Recording => {
                     let remaining = rec.stop - now;
@@ -1021,11 +1139,18 @@ fn draw_recordings_overlay(f: &mut Frame, app: &App) {
 
             let line1 = Line::from(vec![
                 Span::styled(format!("  {} ", icon), Style::default().fg(color).bg(bg)),
-                Span::styled(&rec.programme_title, Style::default().fg(color).bg(bg).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    &rec.programme_title,
+                    Style::default()
+                        .fg(color)
+                        .bg(bg)
+                        .add_modifier(Modifier::BOLD),
+                ),
             ]);
-            let line2 = Line::from(vec![
-                Span::styled(format!("     {} │ {} │ {}", rec.channel_name, time_str, status_text), Style::default().fg(app.theme.text).bg(bg)),
-            ]);
+            let line2 = Line::from(vec![Span::styled(
+                format!("     {} │ {} │ {}", rec.channel_name, time_str, status_text),
+                Style::default().fg(app.theme.text).bg(bg),
+            )]);
 
             ListItem::new(vec![line1, line2])
         })
@@ -1037,9 +1162,18 @@ fn draw_recordings_overlay(f: &mut Frame, app: &App) {
     }
 
     let title = if active_count > 0 {
-        format!(" Recordings ({} active, {} scheduled, {} total) ", active_count, scheduled_count, recs.len())
+        format!(
+            " Recordings ({} active, {} scheduled, {} total) ",
+            active_count,
+            scheduled_count,
+            recs.len()
+        )
     } else if scheduled_count > 0 {
-        format!(" Recordings ({} scheduled, {} total) ", scheduled_count, recs.len())
+        format!(
+            " Recordings ({} scheduled, {} total) ",
+            scheduled_count,
+            recs.len()
+        )
     } else {
         format!(" Recordings ({}) ", recs.len())
     };
@@ -1185,7 +1319,8 @@ fn url_format(url: &str) -> Option<String> {
 /// Extract port from URL
 fn extract_port(url: &str) -> Option<u16> {
     let without_scheme = url
-        .strip_prefix("http://").or_else(|| url.strip_prefix("https://"))
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
         .unwrap_or(url);
     let host_part = without_scheme.split('/').next()?;
     let port_str = host_part.split(':').nth(1)?;
@@ -1195,7 +1330,8 @@ fn extract_port(url: &str) -> Option<u16> {
 /// Extract domain from a URL (e.g. "http://server.example.com:8080/path" → "server.example.com")
 fn extract_domain(url: &str) -> String {
     let without_scheme = url
-        .strip_prefix("http://").or_else(|| url.strip_prefix("https://"))
+        .strip_prefix("http://")
+        .or_else(|| url.strip_prefix("https://"))
         .unwrap_or(url);
     let host = without_scheme.split('/').next().unwrap_or(without_scheme);
     // Strip port
@@ -1275,16 +1411,15 @@ fn draw_logs_overlay(f: &mut Frame, app: &App) {
                 ),
                 Span::styled(
                     format!("{} ", level_str),
-                    Style::default().fg(level_color).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(level_color)
+                        .add_modifier(Modifier::BOLD),
                 ),
                 Span::styled(
                     format!("[{}] ", entry.source),
                     Style::default().fg(app.theme.text_dim),
                 ),
-                Span::styled(
-                    entry.message.clone(),
-                    Style::default().fg(app.theme.text),
-                ),
+                Span::styled(entry.message.clone(), Style::default().fg(app.theme.text)),
             ]);
             ListItem::new(line)
         })
@@ -1299,12 +1434,10 @@ fn draw_logs_overlay(f: &mut Frame, app: &App) {
     f.render_widget(list, content_area);
 
     // Status bar
-    let status = Line::from(vec![
-        Span::styled(
-            " j/k scroll  PgUp/PgDn page  g/G top/bottom  Esc close",
-            Style::default().fg(app.theme.text_dim),
-        ),
-    ]);
+    let status = Line::from(vec![Span::styled(
+        " j/k scroll  PgUp/PgDn page  g/G top/bottom  Esc close",
+        Style::default().fg(app.theme.text_dim),
+    )]);
     f.render_widget(Paragraph::new(status), chunks[1]);
 }
 
@@ -1315,20 +1448,25 @@ fn draw_timezone_overlay(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),  // Title
-            Constraint::Length(3),  // Search
-            Constraint::Min(1),     // List
-            Constraint::Length(1),  // Status
+            Constraint::Length(3), // Title
+            Constraint::Length(3), // Search
+            Constraint::Min(1),    // List
+            Constraint::Length(1), // Status
         ])
         .split(area);
 
     // Title
     let title = Paragraph::new("Select Timezone")
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(app.theme.accent))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(app.theme.accent)),
         )
-        .style(Style::default().fg(app.theme.text).add_modifier(Modifier::BOLD));
+        .style(
+            Style::default()
+                .fg(app.theme.text)
+                .add_modifier(Modifier::BOLD),
+        );
     f.render_widget(title, chunks[0]);
 
     // Search
@@ -1337,12 +1475,12 @@ fn draw_timezone_overlay(f: &mut Frame, app: &App) {
     } else {
         format!("Search: {}", app.tz_search)
     };
-    let search = Paragraph::new(search_text)
-        .block(Block::default()
+    let search = Paragraph::new(search_text).block(
+        Block::default()
             .borders(Borders::ALL)
             .title(" Filter ")
-            .border_style(Style::default().fg(app.theme.highlight))
-        );
+            .border_style(Style::default().fg(app.theme.highlight)),
+    );
     f.render_widget(search, chunks[1]);
 
     // Timezone list
@@ -1351,23 +1489,10 @@ fn draw_timezone_overlay(f: &mut Frame, app: &App) {
     let selected_idx = app.tz_selected;
     let items: Vec<ListItem> = if app.tz_filtered.is_empty() {
         // Show all timezones
-        app.tz_list.iter().enumerate().map(|(i, &tz)| {
-            let local_time = now.with_timezone(&tz).format("%H:%M").to_string();
-            let current_marker = if tz == app.tz { " ✓" } else { "" };
-            let line = format!("{:<30} {} {}", tz.name(), local_time, current_marker);
-            let style = if i == selected_idx {
-                Style::default().bg(app.theme.info).fg(app.theme.text)
-            } else if tz == app.tz {
-                Style::default().fg(app.theme.success)
-            } else {
-                Style::default().fg(app.theme.text)
-            };
-            ListItem::new(line).style(style)
-        }).collect()
-    } else {
-        // Show filtered timezones
-        app.tz_filtered.iter().enumerate().map(|(i, &real_idx)| {
-            if let Some(&tz) = app.tz_list.get(real_idx) {
+        app.tz_list
+            .iter()
+            .enumerate()
+            .map(|(i, &tz)| {
                 let local_time = now.with_timezone(&tz).format("%H:%M").to_string();
                 let current_marker = if tz == app.tz { " ✓" } else { "" };
                 let line = format!("{:<30} {} {}", tz.name(), local_time, current_marker);
@@ -1379,27 +1504,46 @@ fn draw_timezone_overlay(f: &mut Frame, app: &App) {
                     Style::default().fg(app.theme.text)
                 };
                 ListItem::new(line).style(style)
-            } else {
-                ListItem::new("Invalid timezone").style(Style::default().fg(app.theme.error))
-            }
-        }).collect()
+            })
+            .collect()
+    } else {
+        // Show filtered timezones
+        app.tz_filtered
+            .iter()
+            .enumerate()
+            .map(|(i, &real_idx)| {
+                if let Some(&tz) = app.tz_list.get(real_idx) {
+                    let local_time = now.with_timezone(&tz).format("%H:%M").to_string();
+                    let current_marker = if tz == app.tz { " ✓" } else { "" };
+                    let line = format!("{:<30} {} {}", tz.name(), local_time, current_marker);
+                    let style = if i == selected_idx {
+                        Style::default().bg(app.theme.info).fg(app.theme.text)
+                    } else if tz == app.tz {
+                        Style::default().fg(app.theme.success)
+                    } else {
+                        Style::default().fg(app.theme.text)
+                    };
+                    ListItem::new(line).style(style)
+                } else {
+                    ListItem::new("Invalid timezone").style(Style::default().fg(app.theme.error))
+                }
+            })
+            .collect()
     };
 
     let items_count = items.len();
-    let list = List::new(items)
-        .block(Block::default()
+    let list = List::new(items).block(
+        Block::default()
             .borders(Borders::ALL)
             .title(format!(" Timezones ({}) ", items_count))
-            .border_style(Style::default().fg(app.theme.accent))
-        );
+            .border_style(Style::default().fg(app.theme.accent)),
+    );
     f.render_widget(list, chunks[2]);
 
     // Status
-    let status = Line::from(vec![
-        Span::styled(
-            " j/k select  Enter apply  Esc cancel  Type to search",
-            Style::default().fg(app.theme.text_dim),
-        ),
-    ]);
+    let status = Line::from(vec![Span::styled(
+        " j/k select  Enter apply  Esc cancel  Type to search",
+        Style::default().fg(app.theme.text_dim),
+    )]);
     f.render_widget(Paragraph::new(status), chunks[3]);
 }

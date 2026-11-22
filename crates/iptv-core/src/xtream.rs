@@ -148,7 +148,10 @@ impl XtreamProvider {
                 group,
                 logo_url: non_empty_arc(&s.stream_icon),
                 tvg_id: non_empty_arc(&s.epg_channel_id),
-                content_type: ContentType::Live, tvg_name: None, tvg_language: None, tvg_country: None,
+                content_type: ContentType::Live,
+                tvg_name: None,
+                tvg_language: None,
+                tvg_country: None,
                 index: idx,
             });
         }
@@ -162,10 +165,7 @@ impl XtreamProvider {
                 .and_then(|id| cat_map.get(id))
                 .cloned()
                 .unwrap_or_else(|| Arc::clone(&uncategorized));
-            let ext = s
-                .container_extension
-                .as_deref()
-                .unwrap_or("mp4");
+            let ext = s.container_extension.as_deref().unwrap_or("mp4");
             let idx = channels.len();
             channels.push(Channel {
                 name: Arc::from(s.name.as_str()),
@@ -173,7 +173,10 @@ impl XtreamProvider {
                 group,
                 logo_url: non_empty_arc(&s.stream_icon),
                 tvg_id: non_empty_arc(&s.epg_channel_id),
-                content_type: ContentType::Movie, tvg_name: None, tvg_language: None, tvg_country: None,
+                content_type: ContentType::Movie,
+                tvg_name: None,
+                tvg_language: None,
+                tvg_country: None,
                 index: idx,
             });
         }
@@ -231,11 +234,7 @@ impl XtreamProvider {
         })
     }
 
-    fn fetch_categories(
-        &self,
-        agent: &ureq::Agent,
-        action: &str,
-    ) -> Result<Vec<XtreamCategory>> {
+    fn fetch_categories(&self, agent: &ureq::Agent, action: &str) -> Result<Vec<XtreamCategory>> {
         self.fetch_json(agent, action)
     }
 
@@ -249,11 +248,12 @@ impl XtreamProvider {
             .get(&url)
             .timeout(std::time::Duration::from_secs(30))
             .call()
+            .map_err(crate::redact::http_error)
             .with_context(|| format!("Failed to fetch {action}"))?
             .into_string()
             .with_context(|| format!("Failed to read response for {action}"))?;
-        let items: Vec<T> =
-            serde_json::from_str(&body).with_context(|| format!("Failed to parse JSON for {action}"))?;
+        let items: Vec<T> = serde_json::from_str(&body)
+            .with_context(|| format!("Failed to parse JSON for {action}"))?;
         Ok(items)
     }
 }
