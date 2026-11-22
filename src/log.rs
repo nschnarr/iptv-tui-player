@@ -67,7 +67,10 @@ pub struct AppLog {
 
 fn log_dir() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config").join("iptv").join("logs")
+        PathBuf::from(home)
+            .join(".config")
+            .join("iptv")
+            .join("logs")
     } else {
         PathBuf::from(".config").join("iptv").join("logs")
     }

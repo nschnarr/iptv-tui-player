@@ -177,12 +177,7 @@ impl Recorder {
     }
 
     /// Record immediately for a given duration.
-    pub fn record_now(
-        &self,
-        channel_name: String,
-        url: String,
-        duration_minutes: u32,
-    ) -> u32 {
+    pub fn record_now(&self, channel_name: String, url: String, duration_minutes: u32) -> u32 {
         let now = Utc::now();
         let stop = now + chrono::Duration::minutes(duration_minutes as i64);
         self.schedule(channel_name, "Manual Recording".to_string(), url, now, stop)
@@ -220,7 +215,11 @@ impl Recorder {
     pub fn remove_finished(&self, id: u32) {
         let mut state = self.state.lock().unwrap();
         state.recordings.retain(|r| {
-            r.id != id || matches!(r.status, RecordingStatus::Scheduled | RecordingStatus::Recording)
+            r.id != id
+                || matches!(
+                    r.status,
+                    RecordingStatus::Scheduled | RecordingStatus::Recording
+                )
         });
         state.save();
     }
@@ -300,14 +299,22 @@ fn start_ffmpeg_recording(url: &str, output_path: &std::path::Path) -> anyhow::R
     let child = Command::new("ffmpeg")
         .args([
             "-hide_banner",
-            "-loglevel", "error",
-            "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "-reconnect", "1",
-            "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
-            "-i", url,
-            "-c", "copy",
-            "-f", "mpegts",
+            "-loglevel",
+            "error",
+            "-user_agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "-reconnect",
+            "1",
+            "-reconnect_streamed",
+            "1",
+            "-reconnect_delay_max",
+            "5",
+            "-i",
+            url,
+            "-c",
+            "copy",
+            "-f",
+            "mpegts",
             output_path.to_str().unwrap_or("recording.ts"),
         ])
         .stdout(Stdio::null())
@@ -342,7 +349,10 @@ mod tests {
 
     #[test]
     fn test_sanitize_special_chars() {
-        assert_eq!(sanitize_filename("file/name:with*bad?chars"), "file_name_with_bad_chars");
+        assert_eq!(
+            sanitize_filename("file/name:with*bad?chars"),
+            "file_name_with_bad_chars"
+        );
     }
 
     #[test]
@@ -364,7 +374,9 @@ mod tests {
             RecordingStatus::Scheduled,
             RecordingStatus::Recording,
             RecordingStatus::Complete,
-            RecordingStatus::Failed { error: "timeout".to_string() },
+            RecordingStatus::Failed {
+                error: "timeout".to_string(),
+            },
             RecordingStatus::Cancelled,
         ];
         for s in &statuses {
@@ -454,8 +466,9 @@ mod tests {
         // we test the recovery logic directly instead
         let mut state = RecorderState {
             recordings: serde_json::from_str::<Vec<Recording>>(
-                &std::fs::read_to_string(&path).unwrap()
-            ).unwrap(),
+                &std::fs::read_to_string(&path).unwrap(),
+            )
+            .unwrap(),
             next_id: 4,
         };
 
@@ -484,8 +497,14 @@ mod tests {
         }
 
         assert_eq!(state.recordings[0].status, RecordingStatus::Scheduled); // re-scheduled
-        assert!(matches!(state.recordings[1].status, RecordingStatus::Failed { .. })); // interrupted
-        assert!(matches!(state.recordings[2].status, RecordingStatus::Failed { .. })); // missed
+        assert!(matches!(
+            state.recordings[1].status,
+            RecordingStatus::Failed { .. }
+        )); // interrupted
+        assert!(matches!(
+            state.recordings[2].status,
+            RecordingStatus::Failed { .. }
+        )); // missed
     }
 
     #[test]

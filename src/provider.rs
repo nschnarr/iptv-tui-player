@@ -44,9 +44,7 @@ impl Provider {
                         None => eprintln!("  Connected, downloading (unknown size)..."),
                     }
                     // Read into memory in chunks so we can report progress.
-                    let mut data = Vec::with_capacity(
-                        content_length.unwrap_or(0) as usize,
-                    );
+                    let mut data = Vec::with_capacity(content_length.unwrap_or(0) as usize);
                     let mut reader = response.into_reader();
                     let mut buf = [0u8; 64 * 1024];
                     let mut last_report = std::time::Instant::now();
@@ -63,9 +61,7 @@ impl Provider {
                             match content_length {
                                 Some(len) if len > 0 => {
                                     let pct = (data.len() as f64 / len as f64) * 100.0;
-                                    eprintln!(
-                                        "  Downloaded {mb:.2} MB ({pct:.1}%)"
-                                    );
+                                    eprintln!("  Downloaded {mb:.2} MB ({pct:.1}%)");
                                 }
                                 _ => eprintln!("  Downloaded {mb:.2} MB"),
                             }
@@ -117,7 +113,11 @@ mod tests {
     fn test_m3u_file_provider_load() {
         let dir = tempfile::tempdir().unwrap();
         let m3u_path = dir.path().join("test.m3u");
-        std::fs::write(&m3u_path, "#EXTM3U\n#EXTINF:-1,Channel1\nhttp://stream1.tv\n").unwrap();
+        std::fs::write(
+            &m3u_path,
+            "#EXTM3U\n#EXTINF:-1,Channel1\nhttp://stream1.tv\n",
+        )
+        .unwrap();
 
         let provider = Provider::M3u {
             path: Some(m3u_path),
@@ -131,7 +131,10 @@ mod tests {
 
     #[test]
     fn test_m3u_no_path_no_url_errors() {
-        let provider = Provider::M3u { path: None, url: None };
+        let provider = Provider::M3u {
+            path: None,
+            url: None,
+        };
         assert!(provider.load().is_err());
     }
 
@@ -150,7 +153,10 @@ mod tests {
         let m3u_path = dir.path().join("empty.m3u");
         std::fs::write(&m3u_path, "#EXTM3U\n").unwrap();
 
-        let provider = Provider::M3u { path: Some(m3u_path), url: None };
+        let provider = Provider::M3u {
+            path: Some(m3u_path),
+            url: None,
+        };
         let playlist = provider.load().unwrap();
         assert!(playlist.channels.is_empty());
     }
@@ -158,7 +164,10 @@ mod tests {
     #[test]
     fn test_file_provider_no_cache() {
         // File-based provider should return None for load_cached
-        let provider = Provider::M3u { path: Some(PathBuf::from("/tmp/test.m3u")), url: None };
+        let provider = Provider::M3u {
+            path: Some(PathBuf::from("/tmp/test.m3u")),
+            url: None,
+        };
         assert!(provider.load_cached().is_none());
     }
 }

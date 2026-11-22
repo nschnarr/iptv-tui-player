@@ -18,9 +18,17 @@ pub struct DownloadItem {
 #[derive(Debug, Clone)]
 pub enum DownloadStatus {
     Queued,
-    Downloading { bytes_downloaded: u64, total_bytes: Option<u64>, bytes_per_sec: Option<u64> },
-    Complete { path: PathBuf },
-    Failed { error: String },
+    Downloading {
+        bytes_downloaded: u64,
+        total_bytes: Option<u64>,
+        bytes_per_sec: Option<u64>,
+    },
+    Complete {
+        path: PathBuf,
+    },
+    Failed {
+        error: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -100,7 +108,12 @@ impl DownloadManager {
     pub fn pending_count(&self) -> usize {
         let q = self.queue.lock().unwrap();
         q.iter()
-            .filter(|e| matches!(e.status, DownloadStatus::Queued | DownloadStatus::Downloading { .. }))
+            .filter(|e| {
+                matches!(
+                    e.status,
+                    DownloadStatus::Queued | DownloadStatus::Downloading { .. }
+                )
+            })
             .count()
     }
 }
@@ -111,13 +124,16 @@ fn worker_loop(
     download_dir: PathBuf,
 ) {
     while let Ok(item) = rx.recv() {
-
         // Mark as downloading
-        update_status(&queue, &item.url, DownloadStatus::Downloading {
-            bytes_downloaded: 0,
-            total_bytes: None,
-            bytes_per_sec: None,
-        });
+        update_status(
+            &queue,
+            &item.url,
+            DownloadStatus::Downloading {
+                bytes_downloaded: 0,
+                total_bytes: None,
+                bytes_per_sec: None,
+            },
+        );
 
         match download_file(&item, &download_dir, &queue) {
             Ok(path) => {
@@ -164,11 +180,15 @@ fn download_file(
         .and_then(|s| s.parse().ok());
 
     // Update with total size
-    update_status(queue, &item.url, DownloadStatus::Downloading {
-        bytes_downloaded: 0,
-        total_bytes,
-        bytes_per_sec: None,
-    });
+    update_status(
+        queue,
+        &item.url,
+        DownloadStatus::Downloading {
+            bytes_downloaded: 0,
+            total_bytes,
+            bytes_per_sec: None,
+        },
+    );
 
     let mut reader = response.into_reader();
     let mut file = fs::File::create(&output_path)?;
@@ -197,11 +217,15 @@ fn download_file(
                 speed_bytes = 0;
                 speed_timer = Instant::now();
             }
-            update_status(queue, &item.url, DownloadStatus::Downloading {
-                bytes_downloaded: downloaded,
-                total_bytes,
-                bytes_per_sec: last_speed,
-            });
+            update_status(
+                queue,
+                &item.url,
+                DownloadStatus::Downloading {
+                    bytes_downloaded: downloaded,
+                    total_bytes,
+                    bytes_per_sec: last_speed,
+                },
+            );
             last_update = downloaded;
         }
     }
@@ -221,13 +245,16 @@ fn build_output_path(item: &DownloadItem, download_dir: &Path) -> PathBuf {
         } => {
             let safe_series = sanitize_filename(series_name);
             let safe_name = sanitize_filename(&item.name);
-            download_dir
-                .join(&safe_series)
-                .join(format!("S{:02}E{:02} - {}.{}", season, episode, safe_name, ext))
+            download_dir.join(&safe_series).join(format!(
+                "S{:02}E{:02} - {}.{}",
+                season, episode, safe_name, ext
+            ))
         }
         ContentType::Movie => {
             let safe_name = sanitize_filename(&item.name);
-            download_dir.join("Movies").join(format!("{}.{}", safe_name, ext))
+            download_dir
+                .join("Movies")
+                .join(format!("{}.{}", safe_name, ext))
         }
         ContentType::Live => {
             // Shouldn't normally download live streams, but handle gracefully
@@ -245,9 +272,7 @@ fn url_extension(url: &str) -> Option<String> {
     let ext = ext.to_lowercase();
     // Only return known media extensions
     match ext.as_str() {
-        "mp4" | "mkv" | "avi" | "ts" | "m3u8" | "flv" | "mov" | "wmv" | "mpg" | "mpeg" => {
-            Some(ext)
-        }
+        "mp4" | "mkv" | "avi" | "ts" | "m3u8" | "flv" | "mov" | "wmv" | "mpg" | "mpeg" => Some(ext),
         _ => None,
     }
 }
@@ -271,22 +296,34 @@ mod tests {
 
     #[test]
     fn test_url_extension_mp4() {
-        assert_eq!(url_extension("http://example.com/video.mp4"), Some("mp4".to_string()));
+        assert_eq!(
+            url_extension("http://example.com/video.mp4"),
+            Some("mp4".to_string())
+        );
     }
 
     #[test]
     fn test_url_extension_with_query_params() {
-        assert_eq!(url_extension("http://example.com/video.mkv?token=abc"), Some("mkv".to_string()));
+        assert_eq!(
+            url_extension("http://example.com/video.mkv?token=abc"),
+            Some("mkv".to_string())
+        );
     }
 
     #[test]
     fn test_url_extension_ts() {
-        assert_eq!(url_extension("http://example.com/stream.ts"), Some("ts".to_string()));
+        assert_eq!(
+            url_extension("http://example.com/stream.ts"),
+            Some("ts".to_string())
+        );
     }
 
     #[test]
     fn test_url_extension_m3u8() {
-        assert_eq!(url_extension("http://example.com/live.m3u8"), Some("m3u8".to_string()));
+        assert_eq!(
+            url_extension("http://example.com/live.m3u8"),
+            Some("m3u8".to_string())
+        );
     }
 
     #[test]
@@ -301,7 +338,10 @@ mod tests {
 
     #[test]
     fn test_url_extension_case_insensitive() {
-        assert_eq!(url_extension("http://example.com/VIDEO.MP4"), Some("mp4".to_string()));
+        assert_eq!(
+            url_extension("http://example.com/VIDEO.MP4"),
+            Some("mp4".to_string())
+        );
     }
 
     // --- sanitize_filename ---
@@ -318,7 +358,10 @@ mod tests {
 
     #[test]
     fn test_sanitize_windows_forbidden() {
-        assert_eq!(sanitize_filename("file:name*with?chars"), "file_name_with_chars");
+        assert_eq!(
+            sanitize_filename("file:name*with?chars"),
+            "file_name_with_chars"
+        );
     }
 
     // --- build_output_path ---
@@ -360,7 +403,10 @@ mod tests {
             group: "Series".to_string(),
         };
         let path = build_output_path(&item, Path::new("/downloads"));
-        assert_eq!(path, PathBuf::from("/downloads/Breaking Bad/S01E01 - Pilot.mp4"));
+        assert_eq!(
+            path,
+            PathBuf::from("/downloads/Breaking Bad/S01E01 - Pilot.mp4")
+        );
     }
 
     #[test]
@@ -404,7 +450,10 @@ mod tests {
             group: "Series".to_string(),
         };
         let path = build_output_path(&item, Path::new("/dl"));
-        assert_eq!(path, PathBuf::from("/dl/Show_With_Slashes/S01E01 - Bad_ Name_Here.mp4"));
+        assert_eq!(
+            path,
+            PathBuf::from("/dl/Show_With_Slashes/S01E01 - Bad_ Name_Here.mp4")
+        );
     }
 
     // --- DownloadManager queue ---

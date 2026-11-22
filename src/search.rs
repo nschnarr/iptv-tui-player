@@ -23,7 +23,8 @@ pub struct SearchResult {
 
 impl SearchEngine {
     pub fn new(playlist: &Playlist) -> Self {
-        let channel_names: Vec<Arc<str>> = playlist.channels.iter().map(|c| c.name.clone()).collect();
+        let channel_names: Vec<Arc<str>> =
+            playlist.channels.iter().map(|c| c.name.clone()).collect();
 
         let (cmd_tx, cmd_rx) = mpsc::sync_channel::<SearchCommand>(4);
         let (result_tx, result_rx) = mpsc::channel::<SearchResult>();
@@ -31,7 +32,8 @@ impl SearchEngine {
         thread::Builder::new()
             .name("search".into())
             .spawn(move || {
-                let mut nucleo: Nucleo<u32> = Nucleo::new(Config::DEFAULT, Arc::new(|| {}), None, 1);
+                let mut nucleo: Nucleo<u32> =
+                    Nucleo::new(Config::DEFAULT, Arc::new(|| {}), None, 1);
 
                 inject_names(&mut nucleo, &channel_names);
                 drop(channel_names); // free the vec, nucleo owns the data now
@@ -119,7 +121,9 @@ impl SearchEngine {
     }
 
     pub fn send_query(&self, query: &str) {
-        let _ = self.cmd_tx.try_send(SearchCommand::Query(query.to_string()));
+        let _ = self
+            .cmd_tx
+            .try_send(SearchCommand::Query(query.to_string()));
     }
 
     pub fn try_recv(&self) -> Option<SearchResult> {

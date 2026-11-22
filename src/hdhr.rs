@@ -96,11 +96,25 @@ pub struct HdhrServer {
 }
 
 impl HdhrServer {
-    pub fn new(port: u16, bind_addr: String, playlist: Arc<Playlist>, favorites: HashSet<String>, epg: Option<Arc<Epg>>, buffer_mode: BufferMode, buffer_secs: f64) -> Self {
+    pub fn new(
+        port: u16,
+        bind_addr: String,
+        playlist: Arc<Playlist>,
+        favorites: HashSet<String>,
+        epg: Option<Arc<Epg>>,
+        buffer_mode: BufferMode,
+        buffer_secs: f64,
+    ) -> Self {
         Self {
             port,
             bind_addr,
-            state: Arc::new(Mutex::new(HdhrState { playlist, favorites, epg, buffer_mode, buffer_secs })),
+            state: Arc::new(Mutex::new(HdhrState {
+                playlist,
+                favorites,
+                epg,
+                buffer_mode,
+                buffer_secs,
+            })),
         }
     }
 
@@ -157,7 +171,10 @@ fn handle_connection(
         if line.trim().is_empty() {
             break;
         }
-        if let Some(h) = line.strip_prefix("Host: ").or_else(|| line.strip_prefix("host: ")) {
+        if let Some(h) = line
+            .strip_prefix("Host: ")
+            .or_else(|| line.strip_prefix("host: "))
+        {
             host = h.trim().to_string();
         }
     }
@@ -197,7 +214,11 @@ fn handle_connection(
             if let Ok(num) = channel_num.parse::<usize>() {
                 let (url, buffer_mode, buffer_secs) = {
                     let s = state.lock().unwrap();
-                    (get_channel_url_inner(&s, num), s.buffer_mode.clone(), s.buffer_secs)
+                    (
+                        get_channel_url_inner(&s, num),
+                        s.buffer_mode.clone(),
+                        s.buffer_secs,
+                    )
                 };
                 if let Some(url) = url {
                     match buffer_mode {
@@ -259,17 +280,26 @@ fn ffmpeg_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow:
     let mut child = Command::new("ffmpeg")
         .args([
             "-hide_banner",
-            "-loglevel", "error",
+            "-loglevel",
+            "error",
             // Input options
-            "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "-reconnect", "1",
-            "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
-            "-i", url,
+            "-user_agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "-reconnect",
+            "1",
+            "-reconnect_streamed",
+            "1",
+            "-reconnect_delay_max",
+            "5",
+            "-i",
+            url,
             // Output options: copy codecs (no re-encoding), output MPEG-TS to stdout
-            "-c", "copy",
-            "-f", "mpegts",
-            "-metadata", "service_name=IPTV",
+            "-c",
+            "copy",
+            "-f",
+            "mpegts",
+            "-metadata",
+            "service_name=IPTV",
             "pipe:1",
         ])
         .stdout(Stdio::piped())
@@ -277,7 +307,10 @@ fn ffmpeg_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow:
         .stdin(Stdio::null())
         .spawn()?;
 
-    let mut stdout = child.stdout.take().expect("failed to capture ffmpeg stdout");
+    let mut stdout = child
+        .stdout
+        .take()
+        .expect("failed to capture ffmpeg stdout");
 
     // Pre-roll: accumulate data for buffer_secs before sending anything
     let preroll = prebuffer(&mut stdout, buffer_secs);
@@ -324,7 +357,10 @@ fn ffmpeg_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow:
 /// We fetch the stream ourselves with proper headers and pipe it through.
 fn proxy_stream(client: &mut TcpStream, url: &str, buffer_secs: f64) -> anyhow::Result<()> {
     let response = ureq::get(url)
-        .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .set(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .set("Accept", "*/*")
         .set("Connection", "keep-alive")
         .call()?;
@@ -418,7 +454,10 @@ fn build_lineup(state: &Arc<Mutex<HdhrState>>, host: &str) -> Vec<LineupEntry> {
     let mut channel_num = 1;
 
     for channel in &state.playlist.channels {
-        if state.favorites.contains(&favorites::favorite_key(&channel.name, &channel.group)) {
+        if state
+            .favorites
+            .contains(&favorites::favorite_key(&channel.name, &channel.group))
+        {
             entries.push(LineupEntry {
                 guide_number: format!("{}", channel_num),
                 guide_name: channel.name.to_string(),
@@ -443,7 +482,10 @@ fn build_xmltv(state: &Arc<Mutex<HdhrState>>) -> String {
     let mut fav_channels: Vec<(u32, usize)> = Vec::new(); // (guide_number, channel_idx)
 
     for (idx, channel) in state.playlist.channels.iter().enumerate() {
-        if state.favorites.contains(&favorites::favorite_key(&channel.name, &channel.group)) {
+        if state
+            .favorites
+            .contains(&favorites::favorite_key(&channel.name, &channel.group))
+        {
             fav_channels.push((channel_num, idx));
             channel_num += 1;
         }
@@ -491,7 +533,10 @@ fn build_xmltv(state: &Arc<Mutex<HdhrState>>) -> String {
 fn get_channel_url_inner(state: &HdhrState, channel_num: usize) -> Option<String> {
     let mut num = 1;
     for channel in &state.playlist.channels {
-        if state.favorites.contains(&favorites::favorite_key(&channel.name, &channel.group)) {
+        if state
+            .favorites
+            .contains(&favorites::favorite_key(&channel.name, &channel.group))
+        {
             if num == channel_num {
                 return Some(channel.url.to_string());
             }
@@ -548,12 +593,21 @@ mod tests {
     }
 
     fn make_state(channels: Vec<Channel>, favs: Vec<&str>) -> Arc<Mutex<HdhrState>> {
-        let groups: Vec<Arc<str>> = channels.iter().map(|c| c.group.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect();
+        let groups: Vec<Arc<str>> = channels
+            .iter()
+            .map(|c| c.group.clone())
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
         let mut group_indices: HashMap<Arc<str>, Vec<usize>> = HashMap::new();
         for (i, ch) in channels.iter().enumerate() {
             group_indices.entry(ch.group.clone()).or_default().push(i);
         }
-        let playlist = Playlist { channels, groups, group_indices };
+        let playlist = Playlist {
+            channels,
+            groups,
+            group_indices,
+        };
         let favorites: HashSet<String> = favs.into_iter().map(|s| s.to_string()).collect();
         Arc::new(Mutex::new(HdhrState {
             playlist: Arc::new(playlist),
@@ -594,8 +648,10 @@ mod tests {
 
     #[test]
     fn test_xml_escape_special_chars() {
-        assert_eq!(xml_escape("A & B < C > D \"E\" 'F'"),
-                   "A &amp; B &lt; C &gt; D &quot;E&quot; &apos;F&apos;");
+        assert_eq!(
+            xml_escape("A & B < C > D \"E\" 'F'"),
+            "A &amp; B &lt; C &gt; D &quot;E&quot; &apos;F&apos;"
+        );
     }
 
     #[test]

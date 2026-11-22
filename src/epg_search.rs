@@ -30,7 +30,6 @@ impl EpgSearchEngine {
             .name("epg-search".into())
             .spawn(move || {
                 while let Ok(mut query_obj) = query_rx.recv() {
-
                     // Drain to latest query
                     while let Ok(newer) = query_rx.try_recv() {
                         query_obj = newer;
@@ -73,7 +72,10 @@ impl EpgSearchEngine {
             })
             .expect("failed to spawn EPG search thread");
 
-        Self { query_tx, result_rx }
+        Self {
+            query_tx,
+            result_rx,
+        }
     }
 
     pub fn send_query(&self, query: &str, time_start: DateTime<Utc>, time_end: DateTime<Utc>) {
@@ -151,7 +153,11 @@ mod tests {
         let engine = EpgSearchEngine::new(playlist, epg);
 
         let now = Utc::now();
-        engine.send_query("football", now - chrono::Duration::hours(2), now + chrono::Duration::hours(2));
+        engine.send_query(
+            "football",
+            now - chrono::Duration::hours(2),
+            now + chrono::Duration::hours(2),
+        );
 
         // Wait for result
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -212,7 +218,11 @@ mod tests {
         let engine = EpgSearchEngine::new(playlist, epg);
 
         let now = Utc::now();
-        engine.send_query("BREAKING NEWS", now - chrono::Duration::hours(2), now + chrono::Duration::hours(2));
+        engine.send_query(
+            "BREAKING NEWS",
+            now - chrono::Duration::hours(2),
+            now + chrono::Duration::hours(2),
+        );
 
         std::thread::sleep(std::time::Duration::from_millis(100));
         let result = engine.try_recv().unwrap();

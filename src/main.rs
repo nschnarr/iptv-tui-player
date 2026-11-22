@@ -2,23 +2,23 @@
 static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
 
 mod app;
+mod cache;
 mod downloader;
 mod epg;
-mod hdhr;
 mod epg_search;
 mod error;
 mod favorites;
+mod hdhr;
 mod log;
 mod model;
-mod cache;
 mod parser;
 mod player;
 mod provider;
 mod recorder;
 mod search;
 mod series;
-mod timezone;
 mod theme;
+mod timezone;
 mod ui;
 mod xtream;
 
@@ -160,7 +160,19 @@ fn main() -> anyhow::Result<()> {
         None
     };
 
-    run_tui(playlist, epg, cli.hdhr_port, cli.hdhr_bind, cli.buffer_mode, cli.buffer_secs, cli.refresh_hours, cli.player, cli.provider, cli.epg_source, used_cache)?;
+    run_tui(
+        playlist,
+        epg,
+        cli.hdhr_port,
+        cli.hdhr_bind,
+        cli.buffer_mode,
+        cli.buffer_secs,
+        cli.refresh_hours,
+        cli.player,
+        cli.provider,
+        cli.epg_source,
+        used_cache,
+    )?;
     Ok(())
 }
 
@@ -297,17 +309,23 @@ fn parse_args(args: &[String]) -> anyhow::Result<CliArgs> {
 
     // If Xtream flags are present, use Xtream provider
     if xtream_server.is_some() || xtream_user.is_some() || xtream_pass.is_some() {
-        let server =
-            xtream_server.ok_or_else(|| anyhow::anyhow!("--xtream-server is required"))?;
-        let username =
-            xtream_user.ok_or_else(|| anyhow::anyhow!("--xtream-user is required"))?;
-        let password =
-            xtream_pass.ok_or_else(|| anyhow::anyhow!("--xtream-pass is required"))?;
-        return Ok(CliArgs { epg_source, hdhr_port, hdhr_bind, buffer_mode, buffer_secs, refresh_hours, player, provider: Provider::Xtream(XtreamProvider {
-            server,
-            username,
-            password,
-        })});
+        let server = xtream_server.ok_or_else(|| anyhow::anyhow!("--xtream-server is required"))?;
+        let username = xtream_user.ok_or_else(|| anyhow::anyhow!("--xtream-user is required"))?;
+        let password = xtream_pass.ok_or_else(|| anyhow::anyhow!("--xtream-pass is required"))?;
+        return Ok(CliArgs {
+            epg_source,
+            hdhr_port,
+            hdhr_bind,
+            buffer_mode,
+            buffer_secs,
+            refresh_hours,
+            player,
+            provider: Provider::Xtream(XtreamProvider {
+                server,
+                username,
+                password,
+            }),
+        });
     }
 
     // Fall back to M3U
@@ -348,7 +366,9 @@ fn print_help() {
     println!("  -e, --epg <path_or_url>      XMLTV EPG file path or URL");
     println!();
     println!("HDHR Tuner:");
-    println!("  --hdhr-port <port>           Start HDHomeRun tuner server on port (serves favorites)");
+    println!(
+        "  --hdhr-port <port>           Start HDHomeRun tuner server on port (serves favorites)"
+    );
     println!("  --hdhr-bind <addr>           Bind address for HDHR server (default: 127.0.0.1)");
     println!("                               Use 0.0.0.0 to allow LAN access (e.g. for Plex on another machine)");
     println!("  --buffer <none|ffmpeg>       Stream buffer mode (default: none)");
@@ -371,19 +391,45 @@ fn print_help() {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, hdhr_bind: String, buffer_mode: hdhr::BufferMode, buffer_secs: f64, refresh_hours: f64, player: player::Player, provider: Provider, epg_source: Option<String>, used_cache: bool) -> anyhow::Result<()> {
+fn run_tui(
+    playlist: model::Playlist,
+    epg: Option<Epg>,
+    hdhr_port: Option<u16>,
+    hdhr_bind: String,
+    buffer_mode: hdhr::BufferMode,
+    buffer_secs: f64,
+    refresh_hours: f64,
+    player: player::Player,
+    provider: Provider,
+    epg_source: Option<String>,
+    used_cache: bool,
+) -> anyhow::Result<()> {
     // Start HDHR server before entering raw mode so we can print the port
     let hdhr_state = if let Some(port) = hdhr_port {
-        let server = hdhr::HdhrServer::new(port, hdhr_bind.clone(), Arc::new(playlist.clone()), crate::favorites::load_favorites(), epg.as_ref().map(|e| Arc::new(e.clone())), buffer_mode.clone(), buffer_secs);
+        let server = hdhr::HdhrServer::new(
+            port,
+            hdhr_bind.clone(),
+            Arc::new(playlist.clone()),
+            crate::favorites::load_favorites(),
+            epg.as_ref().map(|e| Arc::new(e.clone())),
+            buffer_mode.clone(),
+            buffer_secs,
+        );
         let hdhr_state = server.state();
         let actual_port = server.start()?;
         let mode_str = match &buffer_mode {
             hdhr::BufferMode::FFmpeg => "ffmpeg (remux + buffer)",
             hdhr::BufferMode::None => "none (raw pipe)",
         };
-        eprintln!("HDHR tuner server running on http://{}:{}", hdhr_bind, actual_port);
+        eprintln!(
+            "HDHR tuner server running on http://{}:{}",
+            hdhr_bind, actual_port
+        );
         eprintln!("  Plex tuner URL:  http://<your-ip>:{}", actual_port);
-        eprintln!("  XMLTV guide URL: http://<your-ip>:{}/xmltv.xml", actual_port);
+        eprintln!(
+            "  XMLTV guide URL: http://<your-ip>:{}/xmltv.xml",
+            actual_port
+        );
         eprintln!("  Buffer mode:     {}", mode_str);
         if buffer_secs > 0.0 {
             eprintln!("  Pre-roll buffer: {:.1}s", buffer_secs);
@@ -410,7 +456,14 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
     app.selected_player = player;
 
     // Log startup info
-    app.log.info("startup", format!("Loaded {} channels across {} groups", app.playlist.channels.len(), app.playlist.groups.len()));
+    app.log.info(
+        "startup",
+        format!(
+            "Loaded {} channels across {} groups",
+            app.playlist.channels.len(),
+            app.playlist.groups.len()
+        ),
+    );
     if has_epg {
         app.log.info("startup", "EPG data loaded");
     }
@@ -418,9 +471,11 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
         app.log.info("startup", "HDHomeRun tuner server active");
     }
     if used_cache {
-        app.log.info("startup", "Loaded from cache (will refresh in background)");
+        app.log
+            .info("startup", "Loaded from cache (will refresh in background)");
     }
-    app.log.info("startup", format!("Player: {}", app.selected_player));
+    app.log
+        .info("startup", format!("Player: {}", app.selected_player));
 
     // Start background playlist+EPG refresh thread.
     // Handles both timed auto-refresh and manual trigger.
@@ -442,8 +497,9 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
                     // Wait for either the interval or a manual trigger
                     if interval_ms > 0 {
                         // Use trigger_rx with timeout for timed refresh
-                        match trigger_rx.recv_timeout(std::time::Duration::from_millis(interval_ms)) {
-                            Ok(()) => {} // Manual trigger
+                        match trigger_rx.recv_timeout(std::time::Duration::from_millis(interval_ms))
+                        {
+                            Ok(()) => {}                                          // Manual trigger
                             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {} // Auto refresh
                             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
                         }
@@ -457,9 +513,11 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
                     let refresh_start = std::time::Instant::now();
                     match provider.load() {
                         Ok(new_playlist) => {
-                            eprintln!("[refresh] Playlist loaded: {} channels ({:.1}s)",
+                            eprintln!(
+                                "[refresh] Playlist loaded: {} channels ({:.1}s)",
                                 new_playlist.channels.len(),
-                                refresh_start.elapsed().as_secs_f64());
+                                refresh_start.elapsed().as_secs_f64()
+                            );
                             // Fetch EPG sequentially after playlist
                             let fresh_epg = epg_url_for_refresh.as_deref().and_then(|src| {
                                 if src.starts_with("http://") || src.starts_with("https://") {
@@ -468,9 +526,15 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
                                     Epg::parse_xmltv_file(std::path::Path::new(src)).ok()
                                 }
                             });
-                            eprintln!("[refresh] Total refresh took {:.1}s (EPG: {})",
+                            eprintln!(
+                                "[refresh] Total refresh took {:.1}s (EPG: {})",
                                 refresh_start.elapsed().as_secs_f64(),
-                                if fresh_epg.is_some() { "loaded" } else { "none" });
+                                if fresh_epg.is_some() {
+                                    "loaded"
+                                } else {
+                                    "none"
+                                }
+                            );
                             if refresh_tx.send((new_playlist, fresh_epg)).is_err() {
                                 break;
                             }
@@ -511,9 +575,11 @@ fn run_tui(playlist: model::Playlist, epg: Option<Epg>, hdhr_port: Option<u16>, 
                             })?;
                         app.epg_refresh_rx = Some(epg_rx);
                         if !playlist_stale {
-                            app.status_message = Some("Refreshing EPG in background...".to_string());
+                            app.status_message =
+                                Some("Refreshing EPG in background...".to_string());
                         } else {
-                            app.status_message = Some("Refreshing playlist + EPG in background...".to_string());
+                            app.status_message =
+                                Some("Refreshing playlist + EPG in background...".to_string());
                         }
                     }
                 }
@@ -552,12 +618,17 @@ fn run_event_loop(
         // Check for playlist+EPG refresh
         if let Some(ref rx) = app.refresh_rx {
             if let Ok((new_playlist, fresh_epg)) = rx.try_recv() {
-                app.log.info("refresh", format!("Refresh received — playlist: {} channels, EPG: {}",
-                    new_playlist.channels.len(),
-                    if fresh_epg.is_some() { "yes" } else { "no" }
-                ));
+                app.log.info(
+                    "refresh",
+                    format!(
+                        "Refresh received — playlist: {} channels, EPG: {}",
+                        new_playlist.channels.len(),
+                        if fresh_epg.is_some() { "yes" } else { "no" }
+                    ),
+                );
                 log_memory_diagnostics(app);
-                app.log.info("refresh-mem", "--- BEGIN refresh_playlist ---");
+                app.log
+                    .info("refresh-mem", "--- BEGIN refresh_playlist ---");
                 app.refresh_playlist(new_playlist);
                 app.log.info("refresh-mem", "--- END refresh_playlist ---");
                 log_memory_diagnostics(app);
@@ -808,8 +879,12 @@ fn handle_guide_key(app: &mut App, code: KeyCode) {
                 app.guide_state.epg_search_results.clear();
                 app.guide_state.channels_dirty = true;
             }
-            KeyCode::Char('[') | KeyCode::Char('<') | KeyCode::PageUp => app.guide_shift_time_left(),
-            KeyCode::Char(']') | KeyCode::Char('>') | KeyCode::PageDown => app.guide_shift_time_right(),
+            KeyCode::Char('[') | KeyCode::Char('<') | KeyCode::PageUp => {
+                app.guide_shift_time_left()
+            }
+            KeyCode::Char(']') | KeyCode::Char('>') | KeyCode::PageDown => {
+                app.guide_shift_time_right()
+            }
             KeyCode::Up | KeyCode::Char('k') => app.guide_move_up(),
             KeyCode::Down | KeyCode::Char('j') => app.guide_move_down(),
             KeyCode::Left | KeyCode::Char('h') => app.guide_move_left(),
@@ -900,7 +975,7 @@ fn handle_downloads_key(app: &mut App, code: KeyCode) {
 
 fn handle_series_key(app: &mut App, code: KeyCode) {
     let search_active = app.series_state.as_ref().is_some_and(|s| s.search_active);
-    
+
     if search_active {
         match code {
             KeyCode::Esc => {

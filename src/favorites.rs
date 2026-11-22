@@ -123,9 +123,21 @@ mod tests {
         favs.insert("http://example.com/stream2".to_string());
 
         let channels = vec![
-            ("BBC One".to_string(), "UK".to_string(), "http://example.com/stream1".to_string()),
-            ("CNN".to_string(), "News".to_string(), "http://example.com/stream2".to_string()),
-            ("ESPN".to_string(), "Sports".to_string(), "http://example.com/stream3".to_string()),
+            (
+                "BBC One".to_string(),
+                "UK".to_string(),
+                "http://example.com/stream1".to_string(),
+            ),
+            (
+                "CNN".to_string(),
+                "News".to_string(),
+                "http://example.com/stream2".to_string(),
+            ),
+            (
+                "ESPN".to_string(),
+                "Sports".to_string(),
+                "http://example.com/stream3".to_string(),
+            ),
         ];
 
         let result = migrate_if_needed(&favs, &channels);
@@ -158,9 +170,8 @@ mod tests {
         let json = serde_json::to_string_pretty(&favs).unwrap();
         std::fs::write(&path, &json).unwrap();
 
-        let loaded: HashSet<String> = serde_json::from_str(
-            &std::fs::read_to_string(&path).unwrap()
-        ).unwrap();
+        let loaded: HashSet<String> =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!(favs, loaded);
     }
 }

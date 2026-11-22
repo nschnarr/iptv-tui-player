@@ -3,8 +3,8 @@ use crate::epg::Epg;
 use crate::epg_search::EpgSearchEngine;
 use crate::favorites;
 use crate::hdhr::HdhrState;
-use crate::model::Playlist;
 use crate::log::AppLog;
+use crate::model::Playlist;
 use crate::player::{self, Player};
 use crate::recorder::{Recorder, RecordingStatus};
 use crate::search::SearchEngine;
@@ -88,7 +88,12 @@ pub enum SeriesRow {
     /// A season header.
     SeasonHeader { series_idx: usize, season_num: u32 },
     /// An episode row.
-    Episode { series_idx: usize, season_num: u32, episode_idx: usize, channel_idx: usize },
+    Episode {
+        series_idx: usize,
+        season_num: u32,
+        episode_idx: usize,
+        channel_idx: usize,
+    },
 }
 
 pub struct SeriesState {
@@ -128,14 +133,15 @@ impl SeriesState {
 
     pub fn rebuild_rows(&mut self) {
         self.visible_rows.clear();
-        
+
         let indices: Vec<usize> = match &self.filtered_series {
             Some(filtered) => filtered.clone(),
             None => (0..self.tree.len()).collect(),
         };
-        
+
         for si in indices {
-            self.visible_rows.push(SeriesRow::SeriesHeader { series_idx: si });
+            self.visible_rows
+                .push(SeriesRow::SeriesHeader { series_idx: si });
             if self.expanded_series.contains(&si) {
                 for (&season_num, season) in &self.tree[si].seasons {
                     self.visible_rows.push(SeriesRow::SeasonHeader {
@@ -188,7 +194,8 @@ impl SeriesState {
                 if self.expanded_series.contains(&si) {
                     self.expanded_series.remove(&si);
                     // Also collapse all seasons of this series
-                    let season_keys: Vec<_> = self.expanded_seasons
+                    let season_keys: Vec<_> = self
+                        .expanded_seasons
                         .iter()
                         .filter(|(s, _)| *s == si)
                         .cloned()
@@ -201,7 +208,10 @@ impl SeriesState {
                 }
                 self.rebuild_rows();
             }
-            SeriesRow::SeasonHeader { series_idx, season_num } => {
+            SeriesRow::SeasonHeader {
+                series_idx,
+                season_num,
+            } => {
                 let key = (*series_idx, *season_num);
                 if self.expanded_seasons.contains(&key) {
                     self.expanded_seasons.remove(&key);
@@ -221,14 +231,22 @@ impl SeriesState {
             return;
         }
         match &self.visible_rows[self.selected] {
-            SeriesRow::Episode { series_idx, season_num, .. } => {
+            SeriesRow::Episode {
+                series_idx,
+                season_num,
+                ..
+            } => {
                 // Collapse parent season, move selection to it
                 let key = (*series_idx, *season_num);
                 self.expanded_seasons.remove(&key);
                 self.rebuild_rows();
                 // Find the season header
                 for (i, row) in self.visible_rows.iter().enumerate() {
-                    if let SeriesRow::SeasonHeader { series_idx: si, season_num: sn } = row {
+                    if let SeriesRow::SeasonHeader {
+                        series_idx: si,
+                        season_num: sn,
+                    } = row
+                    {
                         if *si == key.0 && *sn == key.1 {
                             self.selected = i;
                             break;
@@ -236,7 +254,10 @@ impl SeriesState {
                     }
                 }
             }
-            SeriesRow::SeasonHeader { series_idx, season_num } => {
+            SeriesRow::SeasonHeader {
+                series_idx,
+                season_num,
+            } => {
                 let key = (*series_idx, *season_num);
                 if self.expanded_seasons.contains(&key) {
                     self.expanded_seasons.remove(&key);
@@ -245,7 +266,8 @@ impl SeriesState {
                     // Collapse parent series
                     let si = *series_idx;
                     self.expanded_series.remove(&si);
-                    let season_keys: Vec<_> = self.expanded_seasons
+                    let season_keys: Vec<_> = self
+                        .expanded_seasons
                         .iter()
                         .filter(|(s, _)| *s == si)
                         .cloned()
@@ -269,7 +291,8 @@ impl SeriesState {
                 let si = *series_idx;
                 if self.expanded_series.contains(&si) {
                     self.expanded_series.remove(&si);
-                    let season_keys: Vec<_> = self.expanded_seasons
+                    let season_keys: Vec<_> = self
+                        .expanded_seasons
                         .iter()
                         .filter(|(s, _)| *s == si)
                         .cloned()
@@ -372,7 +395,10 @@ impl App {
             .map(|c| (c.name.to_string(), c.group.to_string(), c.url.to_string()))
             .collect();
         if let Some(migrated) = favorites::migrate_if_needed(&favorites, &channels_for_migration) {
-            eprintln!("Migrated {} favorites from URL-based to name-based format", migrated.len());
+            eprintln!(
+                "Migrated {} favorites from URL-based to name-based format",
+                migrated.len()
+            );
             favorites = migrated;
             let _ = favorites::save_favorites(&favorites);
         }
@@ -387,7 +413,10 @@ impl App {
 
         // Create EPG search engine if EPG data is available
         let epg_search_engine = if epg.is_some() {
-            Some(EpgSearchEngine::new(Arc::clone(&playlist), epg.as_ref().map(Arc::clone)))
+            Some(EpgSearchEngine::new(
+                Arc::clone(&playlist),
+                epg.as_ref().map(Arc::clone),
+            ))
         } else {
             None
         };
@@ -462,21 +491,31 @@ impl App {
 
         let rss_before = Self::get_rss_mb();
         let old_playlist_refs = std::sync::Arc::strong_count(&self.playlist);
-        let old_epg_refs = self.epg.as_ref().map(std::sync::Arc::strong_count).unwrap_or(0);
-        self.log.info("refresh-mem", format!(
-            "STEP 0 (before): RSS={:.0}MB | old playlist refs={} ({} ch) | old EPG refs={}",
-            rss_before, old_playlist_refs, old_count, old_epg_refs
-        ));
+        let old_epg_refs = self
+            .epg
+            .as_ref()
+            .map(std::sync::Arc::strong_count)
+            .unwrap_or(0);
+        self.log.info(
+            "refresh-mem",
+            format!(
+                "STEP 0 (before): RSS={:.0}MB | old playlist refs={} ({} ch) | old EPG refs={}",
+                rss_before, old_playlist_refs, old_count, old_epg_refs
+            ),
+        );
 
         // Drop old EPG search engine to release old Arc references
         self.epg_search_engine = None;
 
         let rss_after_epg_drop = Self::get_rss_mb();
         let refs_after_drop = std::sync::Arc::strong_count(&self.playlist);
-        self.log.info("refresh-mem", format!(
+        self.log.info(
+            "refresh-mem",
+            format!(
             "STEP 1 (drop epg_search_engine): RSS={:.0}MB (delta={:+.0}) | old playlist refs={}",
             rss_after_epg_drop, rss_after_epg_drop - rss_before, refs_after_drop
-        ));
+        ),
+        );
 
         // Wrap new playlist in Arc — shared by app, search engines, HDHR (ZERO deep clones)
         let new_arc = Arc::new(new_playlist);
@@ -587,7 +626,11 @@ impl App {
     pub fn selected_channel_url(&self) -> Option<&str> {
         let indices = self.current_channel_indices();
         if self.selected_channel < indices.len() {
-            Some(self.playlist.channels[indices[self.selected_channel]].url.as_ref())
+            Some(
+                self.playlist.channels[indices[self.selected_channel]]
+                    .url
+                    .as_ref(),
+            )
         } else {
             None
         }
@@ -696,8 +739,7 @@ impl App {
             if self.mode == AppMode::Guide {
                 if result.query == self.guide_state.search_query {
                     // Store as HashSet for O(1) lookups
-                    self.guide_state.search_results_set =
-                        result.indices.into_iter().collect();
+                    self.guide_state.search_results_set = result.indices.into_iter().collect();
                     self.guide_state.selected_channel_idx = 0;
                     self.guide_state.channels_dirty = true;
                     updated = true;
@@ -758,8 +800,12 @@ impl App {
         if let Some(url) = self.selected_channel_url() {
             let url = url.to_string();
             match player::launch(self.selected_player, &url, &self.log) {
-                Ok(_) => self.status_message = Some(format!("Launching {}...", self.selected_player)),
-                Err(e) => self.status_message = Some(format!("{} error: {e}", self.selected_player)),
+                Ok(_) => {
+                    self.status_message = Some(format!("Launching {}...", self.selected_player))
+                }
+                Err(e) => {
+                    self.status_message = Some(format!("{} error: {e}", self.selected_player))
+                }
             }
         }
     }
@@ -878,7 +924,8 @@ impl App {
             GuideViewMode::Group => {
                 if self.selected_group < self.playlist.groups.len() {
                     let group = &self.playlist.groups[self.selected_group];
-                    self.playlist.channels_in_group(group)
+                    self.playlist
+                        .channels_in_group(group)
                         .iter()
                         .copied()
                         .filter(|i| has_epg(i))
@@ -921,8 +968,8 @@ impl App {
 
             // Async EPG programme search
             if let Some(ref epg_engine) = self.epg_search_engine {
-                let time_end = self.guide_state.time_start
-                    + Duration::hours(self.guide_state.time_span_hours);
+                let time_end =
+                    self.guide_state.time_start + Duration::hours(self.guide_state.time_span_hours);
                 epg_engine.send_query(
                     &self.guide_state.search_query,
                     self.guide_state.time_start,
@@ -978,7 +1025,12 @@ impl App {
         self.guide_state.group_selector_active = true;
         // Pre-select current group if in Group view mode
         if self.guide_state.view_mode == GuideViewMode::Group {
-            if let Some(pos) = self.guide_state.epg_groups.iter().position(|&gi| gi == self.selected_group) {
+            if let Some(pos) = self
+                .guide_state
+                .epg_groups
+                .iter()
+                .position(|&gi| gi == self.selected_group)
+            {
                 self.guide_state.group_selector_idx = pos;
             } else {
                 self.guide_state.group_selector_idx = 0;
@@ -1022,8 +1074,12 @@ impl App {
             let channel_idx = self.guide_state.cached_channels[idx];
             let url = self.playlist.channels[channel_idx].url.to_string();
             match player::launch(self.selected_player, &url, &self.log) {
-                Ok(_) => self.status_message = Some(format!("Launching {}...", self.selected_player)),
-                Err(e) => self.status_message = Some(format!("{} error: {e}", self.selected_player)),
+                Ok(_) => {
+                    self.status_message = Some(format!("Launching {}...", self.selected_player))
+                }
+                Err(e) => {
+                    self.status_message = Some(format!("{} error: {e}", self.selected_player))
+                }
             }
         }
     }
@@ -1183,11 +1239,19 @@ impl App {
                 SeriesRow::Episode { channel_idx, .. } => {
                     vec![*channel_idx]
                 }
-                SeriesRow::SeasonHeader { series_idx, season_num } => {
+                SeriesRow::SeasonHeader {
+                    series_idx,
+                    season_num,
+                } => {
                     // Download unique episodes in this season (skip duplicates)
                     let series = &state.tree[*series_idx];
                     if let Some(season) = series.seasons.get(season_num) {
-                        season.episodes.iter().filter(|e| !e.is_duplicate).map(|e| e.channel_idx).collect()
+                        season
+                            .episodes
+                            .iter()
+                            .filter(|e| !e.is_duplicate)
+                            .map(|e| e.channel_idx)
+                            .collect()
                     } else {
                         Vec::new()
                     }
@@ -1195,8 +1259,15 @@ impl App {
                 SeriesRow::SeriesHeader { series_idx } => {
                     // Download unique episodes in this series (skip duplicates)
                     let series = &state.tree[*series_idx];
-                    series.seasons.values()
-                        .flat_map(|s| s.episodes.iter().filter(|e| !e.is_duplicate).map(|e| e.channel_idx))
+                    series
+                        .seasons
+                        .values()
+                        .flat_map(|s| {
+                            s.episodes
+                                .iter()
+                                .filter(|e| !e.is_duplicate)
+                                .map(|e| e.channel_idx)
+                        })
                         .collect()
                 }
             }
@@ -1230,8 +1301,12 @@ impl App {
         if let Some(ch_idx) = channel_idx {
             let url = self.playlist.channels[ch_idx].url.to_string();
             match player::launch(self.selected_player, &url, &self.log) {
-                Ok(_) => self.status_message = Some(format!("Launching {}...", self.selected_player)),
-                Err(e) => self.status_message = Some(format!("{} error: {e}", self.selected_player)),
+                Ok(_) => {
+                    self.status_message = Some(format!("Launching {}...", self.selected_player))
+                }
+                Err(e) => {
+                    self.status_message = Some(format!("{} error: {e}", self.selected_player))
+                }
             }
         }
     }
@@ -1256,7 +1331,8 @@ impl App {
             let _ = tx.send(());
             self.status_message = Some("Refreshing playlist...".to_string());
         } else {
-            self.status_message = Some("No refresh source configured (need --url or --xtream)".to_string());
+            self.status_message =
+                Some("No refresh source configured (need --url or --xtream)".to_string());
         }
     }
 
@@ -1269,7 +1345,8 @@ impl App {
             std::thread::Builder::new()
                 .name("epg-refresh".into())
                 .spawn(move || {
-                    let result = if source.starts_with("http://") || source.starts_with("https://") {
+                    let result = if source.starts_with("http://") || source.starts_with("https://")
+                    {
                         crate::epg::Epg::parse_xmltv_url(&source)
                     } else {
                         crate::epg::Epg::parse_xmltv_file(std::path::Path::new(&source))
@@ -1341,7 +1418,9 @@ impl App {
                     self.recorder.cancel(id);
                     self.status_message = Some("Recording cancelled".to_string());
                 }
-                RecordingStatus::Complete | RecordingStatus::Failed { .. } | RecordingStatus::Cancelled => {
+                RecordingStatus::Complete
+                | RecordingStatus::Failed { .. }
+                | RecordingStatus::Cancelled => {
                     self.recorder.remove_finished(id);
                 }
             }
@@ -1356,11 +1435,9 @@ impl App {
         }
         let ch_idx = indices[self.selected_channel];
         let ch = &self.playlist.channels[ch_idx];
-        let id = self.recorder.record_now(
-            ch.name.to_string(),
-            ch.url.to_string(),
-            60,
-        );
+        let id = self
+            .recorder
+            .record_now(ch.name.to_string(), ch.url.to_string(), 60);
         self.status_message = Some(format!("Recording started: {} (60 min, #{})", ch.name, id));
     }
 
@@ -1382,7 +1459,8 @@ impl App {
                 if let Some(programmes) = epg.data.get(tvg_id) {
                     let time_start = self.guide_state.time_start;
                     let time_end = time_start + Duration::hours(self.guide_state.time_span_hours);
-                    let visible: Vec<_> = programmes.iter()
+                    let visible: Vec<_> = programmes
+                        .iter()
                         .filter(|p| p.stop > time_start && p.start < time_end)
                         .collect();
 
@@ -1396,7 +1474,8 @@ impl App {
                         );
                         let now = Utc::now();
                         if prog.start <= now {
-                            self.status_message = Some(format!("Recording now: {} (#{}) ", prog.title, id));
+                            self.status_message =
+                                Some(format!("Recording now: {} (#{}) ", prog.title, id));
                         } else {
                             let starts_in = prog.start - now;
                             let mins = starts_in.num_minutes();
@@ -1425,17 +1504,19 @@ impl App {
         self.mode = AppMode::Timezone;
         self.tz_search.clear();
         self.tz_filtered.clear();
-        
+
         // Find current timezone in list
-        self.tz_selected = self.tz_list
+        self.tz_selected = self
+            .tz_list
             .iter()
             .position(|&tz| tz == self.tz)
             .unwrap_or(0);
-        
+
         // If not in common list, use all timezones
         if self.tz_list.iter().all(|&tz| tz != self.tz) {
             self.tz_list = timezone::all_timezones();
-            self.tz_selected = self.tz_list
+            self.tz_selected = self
+                .tz_list
                 .iter()
                 .position(|&tz| tz == self.tz)
                 .unwrap_or(0);
@@ -1454,7 +1535,7 @@ impl App {
         } else {
             self.tz_filtered.len()
         };
-        
+
         if list_len > 0 && self.tz_selected > 0 {
             self.tz_selected -= 1;
         }
@@ -1466,7 +1547,7 @@ impl App {
         } else {
             self.tz_filtered.len()
         };
-        
+
         if list_len > 0 && self.tz_selected + 1 < list_len {
             self.tz_selected += 1;
         }
@@ -1489,7 +1570,7 @@ impl App {
         } else {
             return;
         };
-        
+
         self.tz = tz;
         if let Err(e) = timezone::save_timezone(tz) {
             self.status_message = Some(format!("Failed to save timezone: {}", e));
@@ -1503,11 +1584,11 @@ impl App {
         self.tz_search = query;
         self.tz_filtered.clear();
         self.tz_selected = 0;
-        
+
         if self.tz_search.is_empty() {
             return;
         }
-        
+
         let query_lower = self.tz_search.to_lowercase();
         for (i, tz) in self.tz_list.iter().enumerate() {
             if tz.name().to_lowercase().contains(&query_lower) {

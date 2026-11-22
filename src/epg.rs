@@ -124,7 +124,10 @@ impl Epg {
                 },
                 Ok(Event::Eof) => break,
                 Err(e) => {
-                    return Err(anyhow::anyhow!("XML parse error at position {}: {e}", xml_reader.error_position()));
+                    return Err(anyhow::anyhow!(
+                        "XML parse error at position {}: {e}",
+                        xml_reader.error_position()
+                    ));
                 }
                 _ => {}
             }
@@ -156,7 +159,7 @@ impl Epg {
             .get(url)
             .call()
             .with_context(|| format!("Failed to fetch EPG from {url}"))?;
-        
+
         // Read into memory to both cache and parse
         let mut data = Vec::new();
         std::io::Read::read_to_end(&mut response.into_reader(), &mut data)
@@ -288,7 +291,10 @@ mod tests {
         let cnn = &epg.data["CNN"];
         assert_eq!(cnn.len(), 2);
         assert_eq!(cnn[0].title, "CNN Newsroom");
-        assert_eq!(cnn[0].description.as_deref(), Some("Breaking news coverage."));
+        assert_eq!(
+            cnn[0].description.as_deref(),
+            Some("Breaking news coverage.")
+        );
         assert_eq!(cnn[1].title, "Anderson Cooper 360");
         assert!(cnn[1].description.is_none());
     }
@@ -331,7 +337,10 @@ mod tests {
         // With space
         let dt = parse_xmltv_datetime("20260213120000 +0000");
         assert!(dt.is_some());
-        assert_eq!(dt.unwrap(), Utc.with_ymd_and_hms(2026, 2, 13, 12, 0, 0).unwrap());
+        assert_eq!(
+            dt.unwrap(),
+            Utc.with_ymd_and_hms(2026, 2, 13, 12, 0, 0).unwrap()
+        );
 
         // Without space
         let dt = parse_xmltv_datetime("20260213120000+0000");
@@ -340,12 +349,18 @@ mod tests {
         // Without timezone
         let dt = parse_xmltv_datetime("20260213120000");
         assert!(dt.is_some());
-        assert_eq!(dt.unwrap(), Utc.with_ymd_and_hms(2026, 2, 13, 12, 0, 0).unwrap());
+        assert_eq!(
+            dt.unwrap(),
+            Utc.with_ymd_and_hms(2026, 2, 13, 12, 0, 0).unwrap()
+        );
 
         // With non-UTC offset
         let dt = parse_xmltv_datetime("20260213120000 +0200");
         assert!(dt.is_some());
-        assert_eq!(dt.unwrap(), Utc.with_ymd_and_hms(2026, 2, 13, 10, 0, 0).unwrap());
+        assert_eq!(
+            dt.unwrap(),
+            Utc.with_ymd_and_hms(2026, 2, 13, 10, 0, 0).unwrap()
+        );
     }
 
     #[test]

@@ -36,7 +36,10 @@ impl Series {
 
     /// Count of unique (non-duplicate) episodes.
     pub fn unique_episode_count(&self) -> usize {
-        self.seasons.values().map(|s| s.episodes.iter().filter(|e| !e.is_duplicate).count()).sum()
+        self.seasons
+            .values()
+            .map(|s| s.episodes.iter().filter(|e| !e.is_duplicate).count())
+            .sum()
     }
 
     /// Count of duplicate episodes.
@@ -93,7 +96,13 @@ pub fn build_series_tree(playlist: &Playlist) -> Vec<Series> {
                             ep.is_duplicate = true;
                         }
                     }
-                    (num, Season { number: num, episodes: eps })
+                    (
+                        num,
+                        Season {
+                            number: num,
+                            episodes: eps,
+                        },
+                    )
                 })
                 .collect();
             Series { name, seasons }
@@ -134,7 +143,11 @@ mod tests {
             }
             group_indices.entry(ch.group.clone()).or_default().push(i);
         }
-        Playlist { channels, groups, group_indices }
+        Playlist {
+            channels,
+            groups,
+            group_indices,
+        }
     }
 
     #[test]
@@ -156,13 +169,16 @@ mod tests {
 
     #[test]
     fn test_single_series_single_episode() {
-        let pl = make_playlist(vec![
-            make_channel("Breaking Bad S01E01", "Series", ContentType::Series {
+        let pl = make_playlist(vec![make_channel(
+            "Breaking Bad S01E01",
+            "Series",
+            ContentType::Series {
                 series_name: Arc::from("Breaking Bad"),
                 season: 1,
                 episode: 1,
-            }, 0),
-        ]);
+            },
+            0,
+        )]);
         let tree = build_series_tree(&pl);
         assert_eq!(tree.len(), 1);
         assert_eq!(tree[0].name, "Breaking Bad");
@@ -173,15 +189,36 @@ mod tests {
     #[test]
     fn test_multiple_seasons() {
         let pl = make_playlist(vec![
-            make_channel("BB S01E01", "S", ContentType::Series {
-                series_name: Arc::from("BB"), season: 1, episode: 1,
-            }, 0),
-            make_channel("BB S01E02", "S", ContentType::Series {
-                series_name: Arc::from("BB"), season: 1, episode: 2,
-            }, 1),
-            make_channel("BB S02E01", "S", ContentType::Series {
-                series_name: Arc::from("BB"), season: 2, episode: 1,
-            }, 2),
+            make_channel(
+                "BB S01E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("BB"),
+                    season: 1,
+                    episode: 1,
+                },
+                0,
+            ),
+            make_channel(
+                "BB S01E02",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("BB"),
+                    season: 1,
+                    episode: 2,
+                },
+                1,
+            ),
+            make_channel(
+                "BB S02E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("BB"),
+                    season: 2,
+                    episode: 1,
+                },
+                2,
+            ),
         ]);
         let tree = build_series_tree(&pl);
         assert_eq!(tree.len(), 1);
@@ -194,21 +231,42 @@ mod tests {
     #[test]
     fn test_duplicate_episodes_marked() {
         let pl = make_playlist(vec![
-            make_channel("BB S01E01 HD", "S", ContentType::Series {
-                series_name: Arc::from("BB"), season: 1, episode: 1,
-            }, 0),
-            make_channel("BB S01E01 SD", "S", ContentType::Series {
-                series_name: Arc::from("BB"), season: 1, episode: 1,
-            }, 1),
-            make_channel("BB S01E02", "S", ContentType::Series {
-                series_name: Arc::from("BB"), season: 1, episode: 2,
-            }, 2),
+            make_channel(
+                "BB S01E01 HD",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("BB"),
+                    season: 1,
+                    episode: 1,
+                },
+                0,
+            ),
+            make_channel(
+                "BB S01E01 SD",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("BB"),
+                    season: 1,
+                    episode: 1,
+                },
+                1,
+            ),
+            make_channel(
+                "BB S01E02",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("BB"),
+                    season: 1,
+                    episode: 2,
+                },
+                2,
+            ),
         ]);
         let tree = build_series_tree(&pl);
         let s1 = &tree[0].seasons[&1];
         assert_eq!(s1.episodes.len(), 3);
         assert!(!s1.episodes[0].is_duplicate); // first E01
-        assert!(s1.episodes[1].is_duplicate);  // second E01
+        assert!(s1.episodes[1].is_duplicate); // second E01
         assert!(!s1.episodes[2].is_duplicate); // E02
         assert_eq!(tree[0].unique_episode_count(), 2);
         assert_eq!(tree[0].duplicate_count(), 1);
@@ -218,15 +276,36 @@ mod tests {
     #[test]
     fn test_multiple_series_sorted() {
         let pl = make_playlist(vec![
-            make_channel("Z Show S01E01", "S", ContentType::Series {
-                series_name: Arc::from("Z Show"), season: 1, episode: 1,
-            }, 0),
-            make_channel("A Show S01E01", "S", ContentType::Series {
-                series_name: Arc::from("A Show"), season: 1, episode: 1,
-            }, 1),
-            make_channel("M Show S01E01", "S", ContentType::Series {
-                series_name: Arc::from("M Show"), season: 1, episode: 1,
-            }, 2),
+            make_channel(
+                "Z Show S01E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("Z Show"),
+                    season: 1,
+                    episode: 1,
+                },
+                0,
+            ),
+            make_channel(
+                "A Show S01E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("A Show"),
+                    season: 1,
+                    episode: 1,
+                },
+                1,
+            ),
+            make_channel(
+                "M Show S01E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("M Show"),
+                    season: 1,
+                    episode: 1,
+                },
+                2,
+            ),
         ]);
         let tree = build_series_tree(&pl);
         assert_eq!(tree.len(), 3);
@@ -238,15 +317,36 @@ mod tests {
     #[test]
     fn test_episodes_sorted_by_number() {
         let pl = make_playlist(vec![
-            make_channel("S01E05", "S", ContentType::Series {
-                series_name: Arc::from("Show"), season: 1, episode: 5,
-            }, 0),
-            make_channel("S01E01", "S", ContentType::Series {
-                series_name: Arc::from("Show"), season: 1, episode: 1,
-            }, 1),
-            make_channel("S01E03", "S", ContentType::Series {
-                series_name: Arc::from("Show"), season: 1, episode: 3,
-            }, 2),
+            make_channel(
+                "S01E05",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("Show"),
+                    season: 1,
+                    episode: 5,
+                },
+                0,
+            ),
+            make_channel(
+                "S01E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("Show"),
+                    season: 1,
+                    episode: 1,
+                },
+                1,
+            ),
+            make_channel(
+                "S01E03",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("Show"),
+                    season: 1,
+                    episode: 3,
+                },
+                2,
+            ),
         ]);
         let tree = build_series_tree(&pl);
         let eps = &tree[0].seasons[&1].episodes;
@@ -260,9 +360,16 @@ mod tests {
         let pl = make_playlist(vec![
             make_channel("Live CH", "L", ContentType::Live, 0),
             make_channel("Movie", "M", ContentType::Movie, 1),
-            make_channel("Series S01E01", "S", ContentType::Series {
-                series_name: Arc::from("Series"), season: 1, episode: 1,
-            }, 2),
+            make_channel(
+                "Series S01E01",
+                "S",
+                ContentType::Series {
+                    series_name: Arc::from("Series"),
+                    season: 1,
+                    episode: 1,
+                },
+                2,
+            ),
         ]);
         let tree = build_series_tree(&pl);
         assert_eq!(tree.len(), 1);

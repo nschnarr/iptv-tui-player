@@ -194,7 +194,9 @@ fn parse_series_info(name: &str) -> Option<ContentType> {
     while i < bytes.len() {
         if bytes[i] == b'S' || bytes[i] == b's' {
             if let Some((season, next)) = parse_number(&bytes[i + 1..]) {
-                if next < bytes.len() - i - 1 && (bytes[i + 1 + next] == b'E' || bytes[i + 1 + next] == b'e') {
+                if next < bytes.len() - i - 1
+                    && (bytes[i + 1 + next] == b'E' || bytes[i + 1 + next] == b'e')
+                {
                     if let Some((episode, _)) = parse_number(&bytes[i + 2 + next..]) {
                         // Extract series name (everything before the SxxExx pattern)
                         let series_name = name[..i].trim().trim_end_matches(&['-', ' ', '.'][..]);
