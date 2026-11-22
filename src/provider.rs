@@ -26,8 +26,11 @@ impl Provider {
                 } else if let Some(u) = url {
                     eprintln!("Fetching M3U playlist from {u}");
                     let start = std::time::Instant::now();
-                    let response = ureq::get(u)
-                        .timeout(std::time::Duration::from_secs(120))
+                    let response = ureq::AgentBuilder::new()
+                        .timeout_connect(std::time::Duration::from_secs(30))
+                        .timeout_read(std::time::Duration::from_secs(60))
+                        .build()
+                        .get(u)
                         .call()
                         .with_context(|| format!("Failed to fetch M3U from {u}"))?;
                     let content_length: Option<u64> = response

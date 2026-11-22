@@ -149,8 +149,11 @@ impl Epg {
 
     /// Parse XMLTV from a URL. Caches the raw data to disk.
     pub fn parse_xmltv_url(url: &str) -> Result<Self> {
-        let response = ureq::get(url)
-            .timeout(std::time::Duration::from_secs(120))
+        let response = ureq::AgentBuilder::new()
+            .timeout_connect(std::time::Duration::from_secs(30))
+            .timeout_read(std::time::Duration::from_secs(60))
+            .build()
+            .get(url)
             .call()
             .with_context(|| format!("Failed to fetch EPG from {url}"))?;
         
