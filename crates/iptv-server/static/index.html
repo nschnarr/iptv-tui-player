@@ -70,6 +70,26 @@
   #plex h2 { font-size: 14px; margin: 0 0 6px; }
   #plex ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
   .empty { padding: 40px 0; text-align: center; color: var(--muted); }
+  .seg { display: flex; flex: none; }
+  .seg button { border-radius: 0; }
+  .seg button:first-child { border-radius: 6px 0 0 6px; }
+  .seg button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+  .seg button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  #window { display: none; }
+  main.shows #window { display: flex; }
+  main.shows { grid-template-columns: 1fr; }
+  main.shows aside { display: none; }
+  .show { margin: 14px 0; border: 1px solid var(--border); border-radius: 8px;
+          background: var(--panel); overflow: hidden; }
+  .show-head { padding: 10px 12px 6px; }
+  .show-title { font-weight: 600; font-size: 15px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .when { font-size: 12px; color: var(--muted); font-weight: 400; white-space: nowrap; }
+  .when.live { color: var(--err); font-weight: 600; }
+  .desc { color: var(--muted); font-size: 13px; margin-top: 4px; display: -webkit-box;
+          -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .show .row { padding-left: 12px; padding-right: 12px; }
+  .show .row:last-child { border-bottom: none; }
+  .show .more { color: var(--muted); font-size: 12px; padding: 6px 12px 10px; }
   @media (max-width: 720px) {
     main { grid-template-columns: 1fr; height: auto; }
     aside { border-right: none; border-bottom: 1px solid var(--border); max-height: 40vh; }
@@ -95,8 +115,18 @@
   </aside>
   <section>
     <div class="toolbar">
+      <div class="seg" role="group" aria-label="Search for">
+        <button id="modeChannels" class="on" title="Search channel names">Channels</button>
+        <button id="modeShows" title="Search the guide for a show or sport">Shows</button>
+      </div>
       <input id="q" type="search" placeholder="Search channels…" autocomplete="off">
-      <label><input id="favOnly" type="checkbox"> Favourites only</label>
+      <label id="favLabel"><input id="favOnly" type="checkbox"> Favourites only</label>
+      <div id="window" class="seg" role="group" aria-label="Airing">
+        <button data-hours="0" title="Only shows airing right now">On now</button>
+        <button data-hours="3" title="On now, or starting within 3 hours">Next 3 h</button>
+        <button data-hours="12" title="On now, or starting within 12 hours">Next 12 h</button>
+        <button data-hours="" title="Everything left in the guide">Any time</button>
+      </div>
     </div>
     <div id="list">
       <div id="plex"></div>
@@ -108,7 +138,8 @@
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
-const state = { group: '', q: '', favOnly: false, offset: 0, groups: [], total: 0 };
+const state = { mode: 'channels', group: '', q: '', favOnly: false, offset: 0, groups: [], total: 0, hours: '3' };
+try { const h = localStorage.getItem('showHours'); if (h !== null) state.hours = h; } catch {}
 const PAGE = 100;
 
 async function api(path, opts = {}) {
@@ -167,7 +198,7 @@ async function refreshStatus() {
   // Playlist (re)loaded: refresh the lists.
   if (l.loaded_at && l.loaded_at !== lastLoadedAt) {
     lastLoadedAt = l.loaded_at;
-    loadGroups(); loadChannels(true);
+    loadGroups(); search();
   }
 }
 
@@ -243,11 +274,89 @@ function renderRow(ch) {
   });
   const logo = ch.logo ? el('img', { class: 'logo', src: ch.logo, loading: 'lazy', alt: '', onerror: (e) => e.target.style.visibility = 'hidden' }) : el('span');
   return el('div', { class: 'row' }, star, logo,
-    el('div', { class: 'name', title: ch.name }, ch.name, state.group ? null : el('small', {}, ch.group)), num);
+    el('div', { class: 'name', title: ch.name }, ch.name, state.group && state.mode === 'channels' ? null : el('small', {}, ch.group)), num);
+}
+
+function when(show) {
+  const start = new Date(show.start), stop = new Date(show.stop);
+  const t = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (show.live) return { text: `Live now · until ${t(stop)}`, live: true };
+  const mins = Math.round((start - Date.now()) / 60000);
+  if (mins < 120) {
+    const rel = mins < 60 ? `In ${Math.max(mins, 1)} min` : `In ${Math.floor(mins / 60)} h ${mins % 60} min`;
+    return { text: `${rel} · ${t(start)}–${t(stop)}`, live: false };
+  }
+  const today = new Date(), tomorrow = new Date(Date.now() + 86400000);
+  const day = start.toDateString() === today.toDateString() ? 'Today'
+            : start.toDateString() === tomorrow.toDateString() ? 'Tomorrow'
+            : start.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  return { text: `${day} ${t(start)}–${t(stop)}`, live: false };
+}
+
+async function loadShows() {
+  const my = ++reqId;
+  $('more').style.display = 'none';
+  if (!state.q) {
+    $('meta').textContent = '';
+    $('rows').replaceChildren(el('div', { class: 'empty' }, 'Search the guide for a show or sport, e.g. golf, Masters, NFL.'));
+    return;
+  }
+  let data;
+  const params = new URLSearchParams({ q: state.q });
+  if (state.hours !== '') params.set('hours', state.hours);
+  try { data = await api('/api/shows?' + params); } catch (e) { $('meta').textContent = e.message; return; }
+  if (my !== reqId) return;
+  if (!data.guide) {
+    $('meta').textContent = '';
+    $('rows').replaceChildren(el('div', { class: 'empty' }, 'No guide loaded (set IPTV_EPG), so shows can\'t be searched.'));
+    return;
+  }
+  const span = { '0': 'on now', '3': 'on now or in the next 3 hours', '12': 'on now or in the next 12 hours' }[state.hours] || 'live and upcoming';
+  $('meta').textContent = data.items.length ? `${data.items.length} show(s) ${span}` : '';
+  if (!data.items.length) {
+    $('rows').replaceChildren(el('div', { class: 'empty' }, state.hours === ''
+      ? 'No upcoming shows match. The guide covers a few days ahead.'
+      : `Nothing ${span} matches. Try a wider time range.`));
+    return;
+  }
+  $('rows').replaceChildren(...data.items.map((show) => {
+    const w = when(show);
+    return el('div', { class: 'show' },
+      el('div', { class: 'show-head' },
+        el('div', { class: 'show-title' }, show.title, el('span', { class: 'when' + (w.live ? ' live' : '') }, w.text)),
+        show.description ? el('div', { class: 'desc', title: show.description }, show.description) : null),
+      ...show.channels.map(renderRow),
+      show.more_channels ? el('div', { class: 'more' }, `and ${show.more_channels} more channel(s) with this guide entry`) : null);
+  }));
+}
+
+function renderWindow() {
+  for (const b of $('window').querySelectorAll('button')) b.classList.toggle('on', b.dataset.hours === state.hours);
+}
+
+function search() { return state.mode === 'shows' ? loadShows() : loadChannels(true); }
+
+function setMode(mode) {
+  state.mode = mode;
+  $('modeChannels').classList.toggle('on', mode === 'channels');
+  $('modeShows').classList.toggle('on', mode === 'shows');
+  document.querySelector('main').classList.toggle('shows', mode === 'shows');
+  $('favLabel').style.display = mode === 'shows' ? 'none' : '';
+  $('q').placeholder = mode === 'shows' ? 'Search shows and sports…' : 'Search channels…';
+  $('q').focus();
+  search();
 }
 
 let searchTimer;
-$('q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = $('q').value.trim(); loadChannels(true); }, 250); });
+$('q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = $('q').value.trim(); search(); }, 250); });
+$('modeChannels').addEventListener('click', () => setMode('channels'));
+$('modeShows').addEventListener('click', () => setMode('shows'));
+for (const b of $('window').querySelectorAll('button')) b.addEventListener('click', () => {
+  state.hours = b.dataset.hours;
+  try { localStorage.setItem('showHours', state.hours); } catch {}
+  renderWindow(); loadShows();
+});
+renderWindow();
 $('favOnly').addEventListener('change', () => { state.favOnly = $('favOnly').checked; loadChannels(true); });
 $('groupFilter').addEventListener('input', renderGroups);
 $('more').addEventListener('click', () => loadChannels(false));

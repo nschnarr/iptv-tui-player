@@ -8,6 +8,7 @@ description = "Headless IPTV server: HDHomeRun tuner, web UI for favourites, and
 iptv-core = { path = "../iptv-core" }
 anyhow = { workspace = true }
 axum = "0.7"
+chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tikv-jemallocator = { workspace = true }
