@@ -6,11 +6,12 @@ use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use iptv_core::epg_search::search_programmes;
 use iptv_core::favorites::{self, favorite_key};
-use iptv_core::model::ContentType;
+use iptv_core::model::{Channel, ContentType};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 type AppStateRef = State<Arc<AppState>>;
@@ -22,6 +23,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/status", get(status))
         .route("/api/groups", get(groups))
         .route("/api/channels", get(channels))
+        .route("/api/shows", get(shows))
         .route("/api/lineup", get(lineup))
         .route("/api/favorites", post(set_favorite))
         .route("/api/refresh", post(refresh))
@@ -144,6 +146,22 @@ struct ChannelItem {
     number: Option<u32>,
 }
 
+fn channel_item(
+    index: usize,
+    ch: &Channel,
+    favs: &HashSet<String>,
+    numbers: &HashMap<usize, u32>,
+) -> ChannelItem {
+    ChannelItem {
+        name: ch.name.to_string(),
+        group: ch.group.to_string(),
+        logo: ch.logo_url.as_deref().map(str::to_string),
+        tvg_id: ch.tvg_id.as_deref().map(str::to_string),
+        favorite: favs.contains(&favorite_key(&ch.name, &ch.group)),
+        number: numbers.get(&index).copied(),
+    }
+}
+
 async fn channels(
     State(s): AppStateRef,
     Query(q): Query<ChannelQuery>,
@@ -181,17 +199,111 @@ async fn channels(
             }
             total += 1;
             if total > q.offset && items.len() < limit {
-                items.push(ChannelItem {
-                    name: ch.name.to_string(),
-                    group: ch.group.to_string(),
-                    logo: ch.logo_url.as_deref().map(str::to_string),
-                    tvg_id: ch.tvg_id.as_deref().map(str::to_string),
-                    favorite,
-                    number: numbers.get(&i).copied(),
-                });
+                items.push(channel_item(i, ch, &favs, &numbers));
             }
         }
         Json(json!({ "total": total, "offset": q.offset, "items": items }))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+struct ShowQuery {
+    q: String,
+    /// Only shows starting within this many hours (0 = on now); omitted = any time
+    hours: Option<f64>,
+    limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct ShowItem {
+    title: String,
+    description: Option<String>,
+    /// RFC 3339; the page shows them in the viewer's time zone
+    start: String,
+    stop: String,
+    live: bool,
+    /// Live playlist channels carrying it (same tvg-id), favourites first
+    channels: Vec<ChannelItem>,
+    /// Matching channels beyond the ones listed
+    more_channels: usize,
+}
+
+/// Channels listed per show; a popular tvg-id can map to dozens of playlist entries.
+const CHANNELS_PER_SHOW: usize = 12;
+
+/// Search the guide by show title (and description), returning upcoming and live
+/// shows with the channels that carry them. Shows on no playlist channel are left
+/// out: there's nothing to tune.
+async fn shows(
+    State(s): AppStateRef,
+    Query(q): Query<ShowQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let (playlist, favs, numbers, epg) = {
+        let h = s.hdhr.lock().unwrap();
+        let numbers: HashMap<usize, u32> = h.lineup().iter().map(|c| (c.index, c.number)).collect();
+        (
+            Arc::clone(h.playlist()),
+            h.favorites().clone(),
+            numbers,
+            h.epg.clone(),
+        )
+    };
+    let Some(epg) = epg else {
+        return Ok(Json(json!({ "items": [], "guide": false })));
+    };
+    blocking(move || {
+        let now = chrono::Utc::now();
+        let until = q
+            .hours
+            .filter(|h| h.is_finite() && *h >= 0.0)
+            .map(|h| now + chrono::Duration::seconds((h * 3600.0) as i64));
+        let limit = q.limit.unwrap_or(50).min(200);
+        // Over-fetch: some guide entries are on channels the playlist doesn't have.
+        let hits = search_programmes(&epg, &q.q, now, until, limit * 4);
+
+        let wanted: HashSet<&str> = hits.iter().map(|h| h.tvg_id).collect();
+        let mut by_tvg: HashMap<&str, Vec<usize>> = HashMap::new();
+        if !wanted.is_empty() {
+            for (i, ch) in playlist.channels.iter().enumerate() {
+                if ch.content_type != ContentType::Live {
+                    continue;
+                }
+                if let Some(t) = ch.tvg_id.as_deref() {
+                    if wanted.contains(t) {
+                        by_tvg.entry(t).or_default().push(i);
+                    }
+                }
+            }
+        }
+
+        let mut items = Vec::new();
+        for hit in &hits {
+            let Some(indices) = by_tvg.get(hit.tvg_id) else {
+                continue;
+            };
+            let mut channels: Vec<ChannelItem> = indices
+                .iter()
+                .map(|&i| channel_item(i, &playlist.channels[i], &favs, &numbers))
+                .collect();
+            channels.sort_by_key(|c| !c.favorite);
+            let more_channels = channels.len().saturating_sub(CHANNELS_PER_SHOW);
+            channels.truncate(CHANNELS_PER_SHOW);
+            let p = hit.programme;
+            items.push(ShowItem {
+                title: p.title.clone(),
+                description: p.description.clone(),
+                start: p.start.to_rfc3339(),
+                stop: p.stop.to_rfc3339(),
+                live: p.start <= now,
+                channels,
+                more_channels,
+            });
+            if items.len() == limit {
+                break;
+            }
+        }
+        Json(json!({ "items": items, "guide": true }))
     })
     .await
 }
